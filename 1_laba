@@ -1,0 +1,410 @@
+# Создать класс Angle для хранения углов
+# хранить внутреннее состояние угла в радианах 
+# реализовать возможность создания угла в радианах и градусах (через фабричные методы) -
+# реализовать строковое представление объекта (str, repr).
+# реализовать присваивание и получение угла в радианах и градусах
+# (через геттеры и сеттеры без использования @property) - 1
+# реализовать сравнение углов (__eq__, __lt__,__le__, __gt__, __ge__, __ne__).
+# При сравненииучитывать периодичность. Т.е. то, что 2π∗N+x=x, где π=3.141529..., N – целое.
+# реализовать преобразование угла в float, int
+# реализовать сложение углов (в том числе угла с числом (float и int),
+# считая, что они заданы в радианах), вычитание (считая, что они заданы в радианах),
+# умножение и деление на число (float и int)
+# ----------------------------------------------------------------------------
+# Создать класс AngleRange для хранения промежутка для углов
+# Реализовать механизм создания объекта через задание начальной и конечной точки промежутка в виде углов float, int или Angle
+# Предусмотреть возможность использования включающих и исключающих промежутков
+# реализовать возможность сравнения объектов на эквивалентность (eq)
+# реализовать строковое представление объекта (str, repr)
+# реализовать получение длины промежутка (abs или отдельный метод)
+# реализовать сравнение промежутков
+# реализовать операцию in для проверки входит ли один промежуток в другой или угол в промежуток
+#  реализовать операции сложения, вычитания (результат в общем виде - список промежутков)
+#  Продемонстрировать работоспособность реализованных методов
+
+import math
+TWO_PI = 2 * math.pi
+class Angle:
+    def __init__(self,radians):
+        self._radians = radians
+
+    @classmethod
+    def from_degrees(cls, degrees):
+        return cls(math.radians(degrees))
+
+    @classmethod
+    def from_radians(cls, radians):
+        return cls(radians)
+
+    def get_radians(self):
+        return self._radians
+
+    def set_radians(self, value):
+         self._radians = value
+
+    def get_degrees(self):
+        return math.degrees(self._radians)
+
+    def set_degrees(self, value):
+        self._radians = math.radians(value)
+
+    def __str__(self):
+        return (f"Угол: {self.get_degrees():.2f} "
+                f"({self._radians:.4f} рад)")
+    def __repr__(self):
+        return f"Angle.from_radians({self._radians!r})"
+
+    def __eq__(self, other):
+        try:
+            a = self._radians % TWO_PI
+            b = other._radians % TWO_PI
+        except AttributeError:
+            return NotImplemented
+        return math.isclose(a, b, abs_tol= 1e-9)
+
+    def __lt__(self, other):
+        try:
+            a = self._radians % TWO_PI
+            b = other._radians % TWO_PI
+        except AttributeError:
+            return NotImplemented
+        return a < b
+
+    def __le__(self, other):
+        try:
+            a = self._radians % TWO_PI
+            b = other._radians % TWO_PI
+        except AttributeError:
+            return NotImplemented
+        return a <= b
+
+    def __gt__(self, other):
+        try:
+            a = self._radians % TWO_PI
+            b = other._radians % TWO_PI
+        except AttributeError:
+            return NotImplemented
+        return a > b
+
+    def __ge__(self, other):
+        try:
+            a = self._radians % TWO_PI
+            b = other._radians % TWO_PI
+        except AttributeError:
+            return NotImplemented
+        return a >= b
+
+    def __ne__(self, other):
+        try:
+            a = self._radians % TWO_PI
+            b = other._radians % TWO_PI
+        except AttributeError:
+            return NotImplemented
+        return not math.isclose(a, b, abs_tol=1e-9)
+
+    def __float__(self):
+        return float(self._radians)
+
+    def __int__(self):
+        return int(self._radians)
+
+    def __add__(self, other):
+        try:
+            other_rad = other._radians
+        except AttributeError:
+            other_rad = other
+        return Angle(self._radians + other_rad)
+
+    def __radd__(self, other):
+        return self.__add__(other)
+
+    def __sub__(self, other):
+        try:
+            other_rad = other._radians
+        except AttributeError:
+            other_rad = other
+        return Angle(self._radians - other_rad)
+
+    def __rsub__(self, other):
+        try:
+            other_rad = other._radians
+        except AttributeError:
+            other_rad = other
+        return Angle(other_rad - self._radians)
+
+    def __mul__(self, other):
+        return Angle(self._radians * other)
+
+    def __rmul__(self, other):
+        return self.__mul__(other)
+
+    def __truediv__(self, other):
+        return Angle(self._radians / other)
+
+class AngleRange:
+    def __init__(self, start, end, include_start=True, include_end=True):
+        self._start = self._to_angle(start)
+        self._end = self._to_angle(end)
+        self._include_start = include_start
+        self._include_end = include_end
+
+    @staticmethod
+    def _to_angle(value):
+        if isinstance(value, Angle):
+            return value
+        return Angle.from_radians(value)
+
+    def __str__(self):
+        left = "[" if self._include_start else "("
+        right = "]" if self._include_end else ")"
+        return f"{left}{self._start}; {self._end}{right}"
+
+    def __repr__(self):
+        return (f"AngleRange("
+                f"{self._start!r}, "
+                f"{self._end!r}, "
+                f"{self._include_start}, "
+                f"{self._include_end})")
+
+    def __eq__(self, other):
+        try:
+            return (
+                self._start == other._start
+                and self._end == other._end
+                and self._include_start == other._include_start
+                and self._include_end == other._include_end
+            )
+        except AttributeError:
+            return NotImplemented
+
+    def __ne__(self, other):
+        result = self.__eq__(other)
+        if result is NotImplemented:
+            return result
+        return not result
+
+    def length(self):
+        start = self._start.get_radians() % TWO_PI
+        end = self._end.get_radians() % TWO_PI
+        if end >= start:
+            return end - start
+        else:
+            return (TWO_PI - start) + end
+
+    def __abs__(self):
+        return self.length()
+
+    def __contains__(self, item):
+        if isinstance(item, AngleRange):
+            return (self._contains_angle(item._start)
+                    and self._contains_angle(item._end))
+        else:
+            try:
+                angle = self._to_angle(item)
+            except (TypeError, ValueError):
+                return False
+            return self._contains_angle(angle)
+
+    def _contains_angle(self, angle):
+        start = self._start.get_radians() % TWO_PI
+        end = self._end.get_radians() % TWO_PI
+        a = angle.get_radians() % TWO_PI
+
+        if start <= end:
+            left_ok = (a >= start) if self._include_start else (a > start)
+            right_ok = (a <= end) if self._include_end else (a < end)
+            return left_ok and right_ok
+        else:
+            left_ok = (a >= start) if self._include_start else (a > start)
+            right_ok = (a <= end) if self._include_end else (a < end)
+            return left_ok or right_ok
+
+    def __lt__(self, other):
+        try:
+            return self.length() < other.length()
+        except AttributeError:
+            return NotImplemented
+
+    def __le__(self, other):
+        try:
+            return self.length() <= other.length()
+        except AttributeError:
+            return NotImplemented
+
+    def __gt__(self, other):
+        try:
+            return self.length() > other.length()
+        except AttributeError:
+            return NotImplemented
+
+    def __ge__(self, other):
+        try:
+            return self.length() >= other.length()
+        except AttributeError:
+            return NotImplemented
+
+    def __add__(self, other):
+        try:
+            if self._overlaps(other) or self._touches(other):
+                return [AngleRange(
+                    self._min_angle(self._start, other._start),
+                    self._max_angle(self._end, other._end),
+                    include_start=True,
+                    include_end=True,
+                )]
+            else:
+                return [self, other]
+        except AttributeError:
+            return NotImplemented
+
+    def __sub__(self, other):
+        if not isinstance(other, AngleRange):
+            return NotImplemented
+        if other._start in self and other._end in self:
+            left = AngleRange(self._start, other._start,
+                              self._include_start, not other._include_start)
+            right = AngleRange(other._end, self._end,
+                               not other._include_end, self._include_end)
+            return [left, right]
+        return [self]
+
+    def _overlaps(self, other):
+        # Пересекаются ли промежутки
+        return (self._start in other or self._end in other
+                or other._start in self or other._end in self)
+
+    def _touches(self, other):
+        # Касаются ли концы промежутков
+        return self._start == other._end or self._end == other._start
+
+    def _min_angle(self, a, b):
+        return a if a < b else b
+
+    def _max_angle(self, a, b):
+        return a if a > b else b
+
+print("!!!Класс Angle!!!")
+print("Геттеры и сеттеры:")
+a = Angle.from_degrees(0)
+print("get_radians: ", a.get_radians())
+print("get_degrees: ", a.get_degrees())
+a.set_radians(1)
+print("vars: ", vars(a))
+print("get_radians: ", a.get_radians())
+print("get_degrees: ", a.get_degrees())
+a.set_degrees(180)
+print("vars: ", vars(a))
+print("get_radians: ", a.get_radians())
+print("get_degrees: ", a.get_degrees())
+print()
+print("Сравнения разных углов и периодичность:")
+a = Angle.from_degrees(90)
+b = Angle.from_degrees(180)
+print("a==b: ", a == b)
+print("a!=b: ", a != b)
+print("a < b: ", a < b)
+print("a<=b: ", a <= b)
+print("a>b: ", a > b)
+print("a>=b: ", a >= b)
+print(Angle.from_degrees(0) == Angle.from_degrees(360))
+print(Angle.from_degrees(0) != Angle.from_degrees(360))
+print(Angle.from_degrees(0) < Angle.from_degrees(360))
+print(Angle.from_degrees(0) <= Angle.from_degrees(360))
+print(Angle.from_degrees(0) > Angle.from_degrees(360))
+print(Angle.from_degrees(0) >= Angle.from_degrees(360))
+print()
+print("float/int:")
+a = Angle.from_degrees(90)
+print(int(a))
+print(float(a))
+print()
+print("str/repr")
+a = Angle.from_degrees(90)
+print(str(a))
+print(repr(a))
+print()
+print("+, -, *, /, //")
+print("+")
+a = Angle.from_degrees(90)
+b = Angle.from_degrees(45)
+print(a + b)
+print(a + 1.0)
+print(1.0 + a)
+print("-")
+a = Angle.from_degrees(90)
+b = Angle.from_degrees(45)
+print(a - b)
+print(a - 1.0)
+print(2.0 - a)
+print("* и /")
+print(a * 2)
+print(2 * a)
+print(a / 2)
+print()
+r1 = AngleRange(Angle.from_degrees(0), Angle.from_degrees(90))
+r2 = AngleRange(0, 1.57)
+r3 = AngleRange(0, Angle.from_degrees(90))
+print("r1:", r1)
+print("r2:", r2)
+print("r3:", r3)
+print("vars(r1):", vars(r1))
+print()
+print("str и repr")
+r = AngleRange(Angle.from_degrees(0), Angle.from_degrees(90))
+print("str: ", str(r))
+print("repr:", repr(r))
+print()
+print("!!!Класс AngleRange!!!")
+print("Включающие / исключающие")
+closed = AngleRange(Angle.from_degrees(0), Angle.from_degrees(90), True, True)
+open_ = AngleRange(Angle.from_degrees(0), Angle.from_degrees(90), False, False)
+mixed = AngleRange(Angle.from_degrees(0), Angle.from_degrees(90), True, False)
+print("closed:", closed)
+print("open:  ", open_)
+print("mixed: ", mixed)
+print()
+print("Длина")
+r = AngleRange(Angle.from_degrees(0), Angle.from_degrees(90))
+print("length():", r.length())
+print("abs(r):   ", abs(r))
+r2 = AngleRange(Angle.from_degrees(0), Angle.from_degrees(180))
+print("length 180°:", r2.length())
+print()
+print("Сравнение на эквивалентность")
+a = AngleRange(Angle.from_degrees(0), Angle.from_degrees(90))
+b = AngleRange(Angle.from_degrees(0), Angle.from_degrees(90))
+c = AngleRange(Angle.from_degrees(0), Angle.from_degrees(180))
+print("a == b:", a == b)
+print("a != b:", a != b)
+print("a == c:", a == c)
+print("a != c:", a != c)
+print()
+print("Угол в промежуток")
+r = AngleRange(Angle.from_degrees(0), Angle.from_degrees(90))
+print("45° in r:  ", Angle.from_degrees(45) in r)
+print("0° in r:   ", Angle.from_degrees(0) in r)
+print("90° in r:  ", Angle.from_degrees(90) in r)
+print("180° in r: ", Angle.from_degrees(180) in r)
+print("1.0 in r:  ", 1.0 in r)
+print()
+print("Промежуток в промежуток")
+big = AngleRange(Angle.from_degrees(0), Angle.from_degrees(180))
+small = AngleRange(Angle.from_degrees(30), Angle.from_degrees(60))
+print("small in big:", small in big)
+print("big in small:", big in small)
+print()
+
+print("Сравнение промежутков по длине")
+r1 = AngleRange(Angle.from_degrees(0), Angle.from_degrees(90))
+r2 = AngleRange(Angle.from_degrees(0), Angle.from_degrees(180))
+print("r1 < r2:", r1 < r2)
+print("r1 > r2:", r1 > r2)
+print("r1 <= r2:", r1 <= r2)
+print("r1 >= r2:", r1 >= r2)
+print()
+
+print("+, -")
+r1 = AngleRange(Angle.from_degrees(0), Angle.from_degrees(90))
+r2 = AngleRange(Angle.from_degrees(45), Angle.from_degrees(135))
+print("r1 + r2:", r1 + r2)
+print("r1 - r2:", r1 - r2)
