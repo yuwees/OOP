@@ -62,15 +62,16 @@ class IntegralCalcer(ABC):
             raise ValueError("Нижний предел должен быть меньше верхнего!")
 
 
-class RectangularCalcer(IntegralCalcer):
+    class RectangularCalcer(IntegralCalcer):
     __slots__ = ('_n',)
+    _n: int                      
 
     def __init__(self, n: int) -> None:
-        self._n: int = n
-        super().__init__()
         if n <= 0:
             raise ValueError("n должно быть больше 0!")
-        self._n = n
+        super().__init__()
+        self._n = n              
+   
 
     def calc(self, f: Callable[[float], float], a: float, b: float) -> float:
         self._validate_bounds(a, b)
