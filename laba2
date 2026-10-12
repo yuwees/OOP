@@ -1,0 +1,92 @@
+import json
+from enum import Enum
+from typing import Dict, List, Tuple
+
+
+# ANSI-команды в виде констант (по требованию задания)
+class Ansi:
+    RESET: str = "\033[0m"
+    COLOR_PREFIX: str = "\033["
+
+
+# перечислитель для цветов (по требованию задания)
+class Color(Enum):
+    BLACK = 30
+    RED = 31
+    GREEN = 32
+    YELLOW = 33
+    BLUE = 34
+    MAGENTA = 35
+    CYAN = 36
+    WHITE = 37
+
+    def to_ansi(self) -> str:
+        return Ansi.COLOR_PREFIX + str(self.value) + "m"
+
+
+# класс для вывода текста псевдошрифтом
+class Printer:
+
+    # шрифты (общие для всех экземпляров)
+    _fonts: Dict[str, Dict[str, List[str]]] = {}
+
+    def __init__(self, color: Color, position: Tuple[int, int],
+                 symbol: str = "*", font_size: str = "5"):
+        self.color: Color = color
+        self.position: Tuple[int, int] = position
+        self.symbol: str = symbol
+        self.font_size: str = font_size
+
+        # загружаем шрифты один раз
+        if not Printer._fonts:
+            with open("fonts.json", "r", encoding="utf-8") as f:
+                Printer._fonts = json.load(f)
+
+        self._font: Dict[str, List[str]] = Printer._fonts[font_size]
+
+    # перемещение курсора в позицию (x, y)
+    def _move(self, x: int, y: int) -> None:
+        # ANSI использует нумерацию с 1
+        print("\033[" + str(y + 1) + ";" + str(x + 1) + "H", end="")
+
+    # превратить текст в список строк псевдошрифта
+    def _render(self, text: str) -> List[str]:
+        height: int = len(self._font[" "])
+        result: List[str] = ["" for _ in range(height)]
+
+        for ch in text:
+            letter: List[str] = self._font[ch.upper()]
+            for i in range(height):
+                line: str = letter[i].replace("*", self.symbol)
+                # добавляем пробел после каждой буквы, чтобы они не слипались
+                result[i] += line + " "
+
+        return result
+
+    # вывести текст в заданной позиции
+    def _draw(self, text: str, x: int, y: int) -> None:
+        lines: List[str] = self._render(text)
+        for i, line in enumerate(lines):
+            self._move(x, y + i)
+            print(self.color.to_ansi() + line + Ansi.RESET, end="")
+
+    # статический вывод (classmethod по требованию задания)
+    @classmethod
+    def print_text(cls, text: str, color: Color, position: Tuple[int, int],
+                   symbol: str = "*", font_size: str = "5") -> None:
+        p: Printer = Printer(color, position, symbol, font_size)
+        p._draw(text, position[0], position[1])
+
+    # вывод экземпляром (для with)
+    def print(self, text: str) -> None:
+        self._draw(text, self.position[0], self.position[1])
+
+    # вход в with
+    def __enter__(self) -> "Printer":
+        return self
+
+    # выход из with - вернуть состояние консоли
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        print(Ansi.RESET, end="")
+        print("\033[1;1H", end="")
+        print()
