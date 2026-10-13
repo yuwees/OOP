@@ -29,6 +29,7 @@ class Color(Enum):
 # класс для вывода текста псевдошрифтом
 class Printer:
 
+    # шрифты (общие для всех экземпляров)
     _fonts: Dict[str, Dict[str, List[str]]] = {}
 
     def __init__(self, color: Color, position: Tuple[int, int],
@@ -40,16 +41,21 @@ class Printer:
         self.position: Tuple[int, int] = position
         self.symbol: str = symbol
         self.font_size: str = font_size
+        self._line_offset: int = 0
 
+        # загружаем шрифты один раз
         if not Printer._fonts:
             with open("fonts.json", "r", encoding="utf-8") as f:
                 Printer._fonts = json.load(f)
 
         self._font: Dict[str, List[str]] = Printer._fonts[font_size]
 
+    # перемещение курсора в позицию (x, y)
     def _move(self, x: int, y: int) -> None:
+        # ANSI использует нумерацию с 1
         print("\033[" + str(y + 1) + ";" + str(x + 1) + "H", end="")
 
+    # превратить текст в список строк псевдошрифта
     def _render(self, text: str) -> List[str]:
         height: int = len(self._font[" "])
         result: List[str] = ["" for _ in range(height)]
@@ -58,37 +64,50 @@ class Printer:
             letter: List[str] = self._font.get(ch.upper(), self._font[" "])
             for i in range(height):
                 line: str = letter[i].replace("*", self.symbol)
+                # пробел после каждой буквы, чтобы они не слипались
                 result[i] += line + " "
 
         return result
 
+    # вывести текст в заданной позиции
     def _draw(self, text: str, x: int, y: int) -> None:
         lines: List[str] = self._render(text)
         for i, line in enumerate(lines):
             self._move(x, y + i)
             print(self.color.to_ansi() + line + Ansi.RESET, end="")
 
+    # сдвинуть следующий вывод на строку вниз (высота шрифта + 1 пробел)
+    def newline(self) -> None:
+        self._line_offset += len(self._font[" "]) + 1
+
+    # статический вывод (classmethod по требованию задания)
     @classmethod
     def print_text(cls, text: str, color: Color, position: Tuple[int, int],
                    symbol: str = "*", font_size: str = "5") -> None:
         p: Printer = Printer(color, position, symbol, font_size)
         p._draw(text, position[0], position[1])
 
+    # вывод экземпляром (для with)
     def print(self, text: str) -> None:
-        self._draw(text, self.position[0], self.position[1])
+        x, y = self.position
+        self._draw(text, x, y + self._line_offset)
 
+    # вход в with
     def __enter__(self) -> "Printer":
         return self
 
+    # выход из with - вернуть состояние консоли
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
         print(Ansi.RESET + Ansi.HOME, end="", flush=True)
 
 
+# очистка экрана для наглядности демонстрации
 def clear() -> None:
-    print(Ansi.CLEAR + Ansi.HOME, end="")
+    print("\n" * 50, end="")
 
 
 def main() -> None:
+
     # === 1. Статический вывод ===
     clear()
     print("1. Статический вывод (classmethod):")
@@ -99,13 +118,15 @@ def main() -> None:
     print(Ansi.HOME, end="")
     input("Enter...")
 
-    # === 2. Вывод через with ===
+    # === 2. Вывод через with (единый стиль) ===
     clear()
     print("2. Вывод через with:")
     print()
     with Printer(Color.BLUE, (2, 3), "*", "5") as printer:
         printer.print("РАЗ")
+        printer.newline()
         printer.print("ДВА")
+        printer.newline()
         printer.print("ТРИ")
 
     print(Ansi.HOME, end="")
