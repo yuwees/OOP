@@ -49,10 +49,26 @@ class Printer:
 
         # загружаем шрифты один раз
         if not Printer._fonts:
-            with open("fonts.json", "r", encoding="utf-8") as f:
-                Printer._fonts = json.load(f)
+            try:
+                with open("fonts.json", "r", encoding="utf-8") as f:
+                    Printer._fonts = json.load(f)
+            except FileNotFoundError:
+                raise RuntimeError("Файл fonts.json не найден рядом с main.py")
+            except json.JSONDecodeError as e:
+                raise RuntimeError(f"Ошибка разбора fonts.json: {e}")
+
+        if font_size not in Printer._fonts:
+            raise RuntimeError(
+                f"В fonts.json нет шрифта размера '{font_size}'. "
+                f"Доступны: {list(Printer._fonts.keys())}"
+            )
 
         self._font: Dict[str, List[str]] = Printer._fonts[font_size]
+
+        if " " not in self._font:
+            raise RuntimeError(
+                f"В шрифте '{font_size}' нет символа пробела ' '"
+            )
 
     # ANSI-последовательность перемещения курсора в (x, y)
     def _move(self, x: int, y: int) -> str:
@@ -60,12 +76,12 @@ class Printer:
         return Ansi.PREFIX + str(y + 1) + ";" + str(x + 1) + "H"
 
     # превратить текст в список строк псевдошрифта
-    def _render:
-(self, text: str) -> List           [str]:
-        height: int letter = len(self._font[": "])
-        result: List[str List] = ["" for _ in range(height)]
+    def _render(self, text: str) -> List[str]:
+        height: int = len(self._font[" "])
+        result: List[str] = ["" for _ in range(height)]
 
-        for ch in text[str] = self._font.get(ch.upper(), self._font[" "])
+        for ch in text:
+            letter: List[str] = self._font.get(ch.upper(), self._font[" "])
             for i in range(height):
                 line: str = letter[i].replace("*", self.symbol)
                 # пробел после каждой буквы, чтобы они не слипались
