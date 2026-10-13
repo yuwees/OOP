@@ -1,0 +1,47 @@
+from printer import Printer, Color
+
+
+# очистка экрана для наглядности демонстрации
+def clear() -> None:
+    print("\033[2J\033[1;1H")
+
+
+def main() -> None:
+
+    # === 1. Статический вывод ===
+    clear()
+    print("1. Статический вывод (classmethod):")
+    print()
+    Printer.print_text("ПРИВЕТ", Color.RED, (2, 3), "*", "5")
+    Printer.print_text("МИР", Color.GREEN, (2, 10), "#", "5")
+
+    print()
+    input("Enter...")
+
+    # === 2. Вывод через with (единый стиль) ===
+    clear()
+    print("2. Вывод через with:")
+    print()
+    with Printer(Color.BLUE, (2, 3), "*", "5") as printer:
+        printer.print("РАЗ")
+        printer.position = (2, 10)
+        printer.print("ДВА")
+        printer.position = (2, 17)
+        printer.print("ТРИ")
+
+    print()
+    input("Enter...")
+
+    # === 3. Разные размеры шрифта (5 и 7) ===
+    clear()
+    print("3. Шрифты высотой 5 и 7:")
+    print()
+    Printer.print_text("АБВ", Color.MAGENTA, (2, 3), "*", "5")
+    Printer.print_text("АБВ", Color.CYAN, (2, 12), "@", "7")
+
+    print()
+    input("Enter...")
+
+
+if __name__ == "__main__":
+    main()
