@@ -8,8 +8,11 @@ class Ansi:
     RESET: str = "\033[0m"
     CLEAR: str = "\033[2J"
     HOME: str = "\033[1;1H"
-    COLOR_PREFIX: str = "\033["
-    MOVE_PREFIX: str = "\033["
+    PREFIX: str = "\033["
+    SAVE_CURSOR: str = "\033[s"
+    RESTORE_CURSOR: str = "\033[u"
+    HIDE_CURSOR: str = "\033[?25l"
+    SHOW_CURSOR: str = "\033[?25h"
 
 
 # перечислитель для цветов (по требованию задания)
@@ -24,7 +27,7 @@ class Color(Enum):
     WHITE = 37
 
     def to_ansi(self) -> str:
-        return Ansi.COLOR_PREFIX + str(self.value) + "m"
+        return Ansi.PREFIX + str(self.value) + "m"
 
 
 # класс для вывода текста псевдошрифтом
@@ -51,18 +54,18 @@ class Printer:
 
         self._font: Dict[str, List[str]] = Printer._fonts[font_size]
 
-    # перемещение курсора в позицию (x, y)
+    # ANSI-последовательность перемещения курсора в (x, y)
     def _move(self, x: int, y: int) -> str:
         # ANSI использует нумерацию с 1
-        return Ansi.MOVE_PREFIX + str(y + 1) + ";" + str(x + 1) + "H"
+        return Ansi.PREFIX + str(y + 1) + ";" + str(x + 1) + "H"
 
     # превратить текст в список строк псевдошрифта
-    def _render(self, text: str) -> List[str]:
-        height: int = len(self._font[" "])
-        result: List[str] = ["" for _ in range(height)]
+    def _render:
+(self, text: str) -> List           [str]:
+        height: int letter = len(self._font[": "])
+        result: List[str List] = ["" for _ in range(height)]
 
-        for ch in text:
-            letter: List[str] = self._font.get(ch.upper(), self._font[" "])
+        for ch in text[str] = self._font.get(ch.upper(), self._font[" "])
             for i in range(height):
                 line: str = letter[i].replace("*", self.symbol)
                 # пробел после каждой буквы, чтобы они не слипались
@@ -74,10 +77,11 @@ class Printer:
     def _draw(self, text: str, x: int, y: int) -> None:
         lines: List[str] = self._render(text)
         for i, line in enumerate(lines):
-            print(self._move(x, y + i) + self.color.to_ansi() + line
-                  + Ansi.RESET, end="", flush=True)
+            print(self._move(x, y + i)
+                  + self.color.to_ansi() + line + Ansi.RESET,
+                  end="", flush=True)
 
-    # сдвинуть следующий вывод на строку вниз (высота шрифта + 1 пробел)
+    # сдвинуть следующий вывод на строку вниз (высота шрифта + 1)
     def newline(self) -> None:
         self._line_offset += len(self._font[" "]) + 1
 
@@ -94,13 +98,15 @@ class Printer:
         x, y = self.position
         self._draw(text, x, y + self._line_offset)
 
-    # вход в with
+    # вход в with: сохраняем курсор и скрываем его
     def __enter__(self) -> "Printer":
+        print(Ansi.SAVE_CURSOR + Ansi.HIDE_CURSOR, end="", flush=True)
         return self
 
-    # выход из with - вернуть состояние консоли в исходное
+    # выход из with: сброс цвета, показ курсора, возврат его на место
     def __exit__(self, exc_type, exc_val, exc_tb) -> bool:
-        print(Ansi.RESET, end="", flush=True)
+        print(Ansi.RESET + Ansi.SHOW_CURSOR + Ansi.RESTORE_CURSOR,
+              end="", flush=True)
         return False
 
 
