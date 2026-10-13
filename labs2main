@@ -6,9 +6,10 @@ from typing import Dict, List, Tuple
 # ANSI-команды в виде констант (по требованию задания)
 class Ansi:
     RESET: str = "\033[0m"
-    HOME: str = "\033[1;1H"
     CLEAR: str = "\033[2J"
+    HOME: str = "\033[1;1H"
     COLOR_PREFIX: str = "\033["
+    MOVE_PREFIX: str = "\033["
 
 
 # перечислитель для цветов (по требованию задания)
@@ -51,9 +52,9 @@ class Printer:
         self._font: Dict[str, List[str]] = Printer._fonts[font_size]
 
     # перемещение курсора в позицию (x, y)
-    def _move(self, x: int, y: int) -> None:
+    def _move(self, x: int, y: int) -> str:
         # ANSI использует нумерацию с 1
-        print("\033[" + str(y + 1) + ";" + str(x + 1) + "H", end="")
+        return Ansi.MOVE_PREFIX + str(y + 1) + ";" + str(x + 1) + "H"
 
     # превратить текст в список строк псевдошрифта
     def _render(self, text: str) -> List[str]:
@@ -73,8 +74,8 @@ class Printer:
     def _draw(self, text: str, x: int, y: int) -> None:
         lines: List[str] = self._render(text)
         for i, line in enumerate(lines):
-            self._move(x, y + i)
-            print(self.color.to_ansi() + line + Ansi.RESET, end="")
+            print(self._move(x, y + i) + self.color.to_ansi() + line
+                  + Ansi.RESET, end="", flush=True)
 
     # сдвинуть следующий вывод на строку вниз (высота шрифта + 1 пробел)
     def newline(self) -> None:
@@ -82,7 +83,8 @@ class Printer:
 
     # статический вывод (classmethod по требованию задания)
     @classmethod
-    def print_text(cls, text: str, color: Color, position: Tuple[int, int],
+    def print_text(cls, text: str, color: Color,
+                   position: Tuple[int, int] = (0, 0),
                    symbol: str = "*", font_size: str = "5") -> None:
         p: Printer = Printer(color, position, symbol, font_size)
         p._draw(text, position[0], position[1])
@@ -96,25 +98,25 @@ class Printer:
     def __enter__(self) -> "Printer":
         return self
 
-    # выход из with - вернуть состояние консоли
-    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
-        print(Ansi.RESET + Ansi.HOME, end="", flush=True)
+    # выход из with - вернуть состояние консоли в исходное
+    def __exit__(self, exc_type, exc_val, exc_tb) -> bool:
+        print(Ansi.RESET, end="", flush=True)
+        return False
 
 
 # очистка экрана для наглядности демонстрации
 def clear() -> None:
-    print("\n" * 50, end="")
+    print(Ansi.CLEAR + Ansi.HOME, end="", flush=True)
 
 
 def main() -> None:
 
-    # === 1. Статический вывод ===
+    # === 1. Статический вывод (classmethod) ===
     clear()
     print("1. Статический вывод (classmethod):")
     print()
     Printer.print_text("ПРИВЕТ", Color.RED, (2, 3), "*", "5")
     Printer.print_text("МИР", Color.GREEN, (2, 10), "#", "5")
-
     print(Ansi.HOME, end="")
     input("Enter...")
 
@@ -128,8 +130,7 @@ def main() -> None:
         printer.print("ДВА")
         printer.newline()
         printer.print("ТРИ")
-
-    print(Ansi.HOME, end="")
+    print()
     input("Enter...")
 
     # === 3. Разные размеры шрифта (5 и 7) ===
@@ -138,7 +139,6 @@ def main() -> None:
     print()
     Printer.print_text("АБВ", Color.MAGENTA, (2, 3), "*", "5")
     Printer.print_text("АБВ", Color.CYAN, (2, 12), "@", "7")
-
     print()
     input("Enter...")
 
