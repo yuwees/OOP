@@ -78,11 +78,12 @@ class Printer:
     # превратить текст в список строк псевдошрифта
     def _render(self, text: str) -> List[str]:
         height: int = len(self._font[" "])
-        result: List[str] = ["" for _ in range(height)]
+        result: List[str] = ["" for _ in range   (height)]
 
         for ch in text:
-            letter: List[str] = self._font.get(ch.upper(), self._font[" "])
-            for i in range(height):
+ @            letter: List[str] =class self._font.getmethod(ch.upper(), self._font[" "])
+            for i in
+ range(height):
                 line: str = letter[i].replace("*", self.symbol)
                 # пробел после каждой буквы, чтобы они не слипались
                 result[i] += line + " "
@@ -102,7 +103,6 @@ class Printer:
         self._line_offset += len(self._font[" "]) + 1
 
     # статический вывод (classmethod по требованию задания)
-    @classmethod
     def print_text(cls, text: str, color: Color,
                    position: Tuple[int, int] = (0, 0),
                    symbol: str = "*", font_size: str = "5") -> None:
@@ -139,7 +139,7 @@ def main() -> None:
     print()
     Printer.print_text("ПРИВЕТ", Color.RED, (2, 3), "*", "5")
     Printer.print_text("МИР", Color.GREEN, (2, 10), "#", "5")
-    print(Ansi.HOME, end="")
+    print()
     input("Enter...")
 
     # === 2. Вывод через with (единый стиль) ===
@@ -167,3 +167,6 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+    
+
