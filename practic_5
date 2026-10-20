@@ -1,7 +1,8 @@
 from abc import ABC, abstractmethod
 
 
-# Часть 1: Иерархия транспорта
+#Часть 1: Иерархия транспорта
+
 class Vehicle(ABC):
     __slots__ = ("_name",)
 
@@ -37,7 +38,8 @@ class AirVehicle(Vehicle):
         pass
 
 
-#  Часть 3: Двигатели (композиция)
+#Часть 3: Двигатели (композиция)
+
 class Engine(ABC):
     __slots__ = ()
 
@@ -54,7 +56,7 @@ class ElectricEngine(Engine):
     __slots__ = ()
 
     def start(self) -> str:
-        return "Электродвигатель тихо запущен"
+        return "Электродвигатель запущен"
 
     def fuel_type(self) -> str:
         return "электричество"
@@ -64,7 +66,7 @@ class DieselEngine(Engine):
     __slots__ = ()
 
     def start(self) -> str:
-        return "Дизельный двигатель завёлся с грохотом"
+        return "Дизельный двигатель запущен"
 
     def fuel_type(self) -> str:
         return "дизель"
@@ -74,20 +76,23 @@ class HybridEngine(Engine):
     __slots__ = ()
 
     def start(self) -> str:
-        return "Гибрид запущен: сначала электричество"
+        return "Гибридный двигатель запущен"
 
     def fuel_type(self) -> str:
         return "гибрид (электро + дизель)"
 
 
-# Конкретные транспортные средства
+#Конкретные транспортные средства
+
 class Car(GroundVehicle):
     __slots__ = ("_engine",)
 
     def __init__(self, name: str, engine: Engine | None = None) -> None:
         super().__init__(name)
-        # Композиция: если двигатель не передан — создаём свой
-        self._engine: Engine = engine if engine is not None else ElectricEngine()
+        if engine is not None:
+            self._engine: Engine = engine
+        else:
+            self._engine: Engine = ElectricEngine()
 
     def describe(self) -> str:
         return f"Car '{self._name}' — наземный, двигатель: {self._engine.fuel_type()}"
@@ -99,15 +104,18 @@ class Car(GroundVehicle):
         return self._engine.start()
 
 
-class Ship(WaterVehicle):
+class Boat(WaterVehicle):
     __slots__ = ("_engine",)
 
     def __init__(self, name: str, engine: Engine | None = None) -> None:
         super().__init__(name)
-        self._engine: Engine = engine if engine is not None else DieselEngine()
+        if engine is not None:
+            self._engine: Engine = engine
+        else:
+            self._engine: Engine = DieselEngine()
 
     def describe(self) -> str:
-        return f"Ship '{self._name}' — водный, двигатель: {self._engine.fuel_type()}"
+        return f"Boat '{self._name}' — водный, двигатель: {self._engine.fuel_type()}"
 
     def replace_engine(self, engine: Engine) -> None:
         self._engine = engine
@@ -121,7 +129,10 @@ class Plane(AirVehicle):
 
     def __init__(self, name: str, engine: Engine | None = None) -> None:
         super().__init__(name)
-        self._engine: Engine = engine if engine is not None else HybridEngine()
+        if engine is not None:
+            self._engine: Engine = engine
+        else:
+            self._engine: Engine = HybridEngine()
 
     def describe(self) -> str:
         return f"Plane '{self._name}' — воздушный, двигатель: {self._engine.fuel_type()}"
@@ -133,7 +144,7 @@ class Plane(AirVehicle):
         return self._engine.start()
 
 
-# Часть 4: Флот (агрегация)
+#Часть 4: Флот (агрегация)
 
 class Fleet:
     __slots__ = ("_vehicles",)
@@ -151,29 +162,27 @@ class Fleet:
         return result
 
 
-
-
 if __name__ == "__main__":
     car = Car("Toyota")
-    ship = Ship("Титаник")
+    boat = Boat("Титаник")
     plane = Plane("Победа")
     plane2 = Plane("Кукурузник", engine=DieselEngine())
 
-    print("Старт двигателей")
+    print("Старт двигателей:")
     print(car.start())
-    print(ship.start())
+    print(boat.start())
     print(plane.start())
     print(plane2.start())
 
-    print("\nЗамена двигателя у машины")
+    print("\nЗамена двигателя у машины:")
     car.replace_engine(HybridEngine())
     print(car.start())
     print(car.describe())
 
-    print("\nФлот")
+    print("\nФлот:")
     fleet = Fleet()
     fleet.add(car)
-    fleet.add(ship)
+    fleet.add(boat)
     fleet.add(plane)
     fleet.add(plane2)
     fleet.print_all()
