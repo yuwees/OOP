@@ -1,0 +1,271 @@
+import os
+import re
+from datetime import datetime
+from enum import Enum, auto
+from typing import List, Protocol
+
+
+# ==========================================
+# 1. Перечислитель уровней логирования
+# ==========================================
+class LogLevel(Enum):
+    INFO = auto()
+    WARN = auto()
+    ERROR = auto()
+
+    def __str__(self):
+        return self.name
+
+
+# ==========================================
+# 2. Интерфейс фильтров (Protocol)
+# ==========================================
+class ILogFilter(Protocol):
+    def match(self, log_level: LogLevel, text: str) -> bool:
+        ...
+
+
+# ==========================================
+# 3. Реализация фильтров
+# ==========================================
+class SimpleLogFilter:
+    """Фильтр по вхождению простой подстроки (без учета регистра)"""
+    def __init__(self, pattern: str):
+        self.pattern = pattern.lower()
+
+    def match(self, log_level: LogLevel, text: str) -> bool:
+        return self.pattern in text.lower()
+
+
+class ReLogFilter:
+    """Фильтр по регулярному выражению"""
+    def __init__(self, pattern: str):
+        self.regex = re.compile(pattern, re.IGNORECASE)
+
+    def match(self, log_level: LogLevel, text: str) -> bool:
+        return bool(self.regex.search(text))
+
+
+class LevelFilter:
+    """Фильтр по уровню логирования (пропускает >= заданного)"""
+    def __init__(self, min_level: LogLevel):
+        self.min_level = min_level
+
+    def match(self, log_level: LogLevel, text: str) -> bool:
+        return log_level.value >= self.min_level.value
+
+
+# ==========================================
+# 4. Интерфейс обработчиков (Protocol)
+# ==========================================
+class ILogHandler(Protocol):
+    def handle(self, log_level: LogLevel, text: str) -> None:
+        ...
+
+
+# ==========================================
+# 5. Реализация обработчиков
+# ==========================================
+class ConsoleHandler:
+    """Вывод в консоль"""
+    def handle(self, log_level: LogLevel, text: str) -> None:
+        print(f"[CONSOLE] {text}")
+
+
+class FileHandler:
+    """Запись в файл"""
+    def __init__(self, filename: str):
+        self.filename = filename
+
+    def handle(self, log_level: LogLevel, text: str) -> None:
+        with open(self.filename, 'a', encoding='utf-8') as f:
+            f.write(text + '\n')
+
+
+class SocketHandler:
+    """Имитация отправки логов через сокет (Заглушка)"""
+    def __init__(self, host: str = '127.0.0.1', port: int = 9999):
+        self.host = host
+        self.port = port
+
+    def handle(self, log_level: LogLevel, text: str) -> None:
+        print(f"[SOCKET -> {self.host}:{self.port}] Отправлен лог: {text}")
+
+
+class SyslogHandler:
+    """Имитация записи в системный журнал (Заглушка)"""
+    def handle(self, log_level: LogLevel, text: str) -> None:
+        print(f"[SYSLOG] Записано в систему: {text}")
+
+
+class FtpHandler:
+    """Имитация записи логов на FTP сервер (Заглушка)"""
+    def __init__(self, host: str, user: str, remote_file: str = 'log.txt'):
+        self.host = host
+        self.user = user
+        self.remote_file = remote_file
+
+    def handle(self, log_level: LogLevel, text: str) -> None:
+        print(f"[FTP {self.user}@{self.host} -> {self.remote_file}] Загружен лог: {text}")
+
+
+# ==========================================
+# 6. Интерфейс форматтеров (Protocol)
+# ==========================================
+class ILogFormatter(Protocol):
+    def format(self, log_level: LogLevel, text: str) -> str:
+        ...
+
+
+# ==========================================
+# 7. Реализация форматтера
+# ==========================================
+class DefaultFormatter:
+    """Форматирует сообщение согласно заданию: [LEVEL] [DATE] TEXT"""
+    def format(self, log_level: LogLevel, text: str) -> str:
+        date_str = datetime.now().strftime("%Y.%m.%d %H:%M:%S")
+        return f"[{log_level}] [{date_str}] {text}"
+
+
+# ==========================================
+# 8. Класс Logger (Композиция)
+# ==========================================
+class Logger:
+    def __init__(self,
+                 filters: List[ILogFilter],
+                 formatters: List[ILogFormatter],
+                 handlers: List[ILogHandler]):
+        self.filters = filters
+        self.formatters = formatters
+        self.handlers = handlers
+
+    def log(self, log_level: LogLevel, text: str) -> None:
+        # 1. Фильтрация (логика AND: все фильтры должны пропустить)
+        for f in self.filters:
+            if not f.match(log_level, text):
+                return
+
+        # 2. Форматирование (последовательно через все форматтеры)
+        formatted_text = text
+        for fmt in self.formatters:
+            formatted_text = fmt.format(log_level, formatted_text)
+
+        # 3. Передача обработчикам
+        for handler in self.handlers:
+            handler.handle(log_level, formatted_text)
+
+    def log_info(self, text: str) -> None:
+        self.log(LogLevel.INFO, text)
+
+    def log_warn(self, text: str) -> None:
+        self.log(LogLevel.WARN, text)
+
+    def log_error(self, text: str) -> None:
+        self.log(LogLevel.ERROR, text)
+
+
+# ==========================================
+# 9. Демонстрация работы
+# ==========================================
+if __name__ == "__main__":
+    print("=== Демонстрация системы логирования ===\n")
+
+    # Удаляем старый файл логов для чистоты эксперимента
+    log_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "log.txt")
+    if os.path.exists(log_path):
+        os.remove(log_path)
+
+    # Инициализация обработчиков, фильтров и форматтера
+    console_handler = ConsoleHandler()
+    file_handler = FileHandler(log_path)
+    ftp_handler = FtpHandler("ftp.example.com", "admin", "remote_log.txt")
+    socket_handler = SocketHandler("127.0.0.1", 9999)
+    syslog_handler = SyslogHandler()
+    formatter = DefaultFormatter()
+
+    level_filter = LevelFilter(LogLevel.WARN)
+    simple_filter = SimpleLogFilter("важно")
+    regex_filter = ReLogFilter(r"Error \d+")
+
+
+    print("--- Сценарий 1: ConsoleHandler + LevelFilter(WARN) ---")
+    logger1 = Logger(
+        filters=[level_filter],
+        formatters=[formatter],
+        handlers=[console_handler],
+    )
+    logger1.log_info("Это INFO сообщение (должно быть отфильтровано)")
+    logger1.log_warn("Это WARN сообщение")
+    logger1.log_error("Это ERROR сообщение")
+    print()
+
+
+    print("--- Сценарий 2: FileHandler + SimpleLogFilter('важно') ---")
+    logger2 = Logger(
+        filters=[simple_filter],
+        formatters=[formatter],
+        handlers=[file_handler, console_handler],
+    )
+    logger2.log_info("Обычное сообщение (не пройдет)")
+    logger2.log_info("Это важно: сообщение прошло фильтр!")
+    logger2.log_warn("Важное предупреждение!")
+
+    print("\n[ПРОВЕРКА] Содержимое log.txt:")
+    if os.path.exists(log_path):
+        with open(log_path, "r", encoding="utf-8") as f:
+            content = f.read()
+            print(content if content.strip() else "(Файл пуст!)")
+    else:
+        print("(Файл не был создан!)")
+    print()
+
+
+    print("--- Сценарий 3: Комплексный логгер (Regex + FTP) ---")
+    logger3 = Logger(
+        filters=[regex_filter],
+        formatters=[formatter],
+        handlers=[ftp_handler],
+    )
+    logger3.log_error("Error 404: Not Found")        # Пройдет
+    logger3.log_error("Just an error without code")  # Не пройдет (нет цифр)
+    print()
+
+
+    print("--- Сценарий 4: SyslogHandler ---")
+    logger4 = Logger(
+        filters=[],
+        formatters=[formatter],
+        handlers=[syslog_handler],
+    )
+    logger4.log_info("Сообщение в системный лог")
+    print()
+
+
+    print("--- Сценарий 5: SocketHandler ---")
+    logger5 = Logger(
+        filters=[level_filter],
+        formatters=[formatter],
+        handlers=[socket_handler],
+    )
+    logger5.log_info("Это INFO (отфильтровано LevelFilter(WARN))")
+    logger5.log_warn("WARN-сообщение в сокет")
+    logger5.log_error("ERROR-сообщение в сокет")
+    print()
+
+
+    print("--- Сценарий 6: Всё вместе (Комбинированный логгер) ---")
+    # Один логгер — куча фильтров и обработчиков, демонстрация композиции
+    mega_logger = Logger(
+        filters=[LevelFilter(LogLevel.INFO), SimpleLogFilter("тест")],
+        formatters=[formatter],
+        handlers=[
+            console_handler,
+            file_handler,
+            socket_handler,
+            syslog_handler,
+            ftp_handler,
+        ],
+    )
+    mega_logger.log_info("Это тестовое сообщение для всех обработчиков")
+
+    print("\n=== Демонстрация завершена ===")
