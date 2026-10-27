@@ -1,0 +1,296 @@
+import logging
+import logging.handlers
+import os
+import re
+import socket
+import threading
+import time
+from datetime import datetime
+from enum import Enum, auto
+from ftplib import FTP
+from io import BytesIO, StringIO
+from typing import List, Protocol
+
+
+# уровни важности для логов
+class LogLevel(Enum):
+    INFO = auto()
+    WARN = auto()
+    ERROR = auto()
+
+
+# интерфейс для фильтров
+class ILogFilter(Protocol):
+    def match(self, log_level: LogLevel, text: str) -> bool:
+        ...
+
+
+# интерфейс для обработчиков
+class ILogHandler(Protocol):
+    def handle(self, log_level: LogLevel, text: str) -> None:
+        ...
+
+
+# интерфейс для форматтеров
+class ILogFormatter(Protocol):
+    def format(self, log_level: LogLevel, text: str) -> str:
+        ...
+
+
+# фильтр по обычному тексту
+class SimpleLogFilter:
+    def __init__(self, pattern: str):
+        self.pattern = pattern
+
+    def match(self, log_level: LogLevel, text: str) -> bool:
+        return self.pattern in text
+
+
+# фильтр по регуляркам
+class ReLogFilter:
+    def __init__(self, pattern: str):
+        self.pattern = re.compile(pattern)
+
+    def match(self, log_level: LogLevel, text: str) -> bool:
+        return bool(self.pattern.search(text))
+
+
+# фильтр по уровню важности
+class LevelFilter:
+    def __init__(self, level: LogLevel):
+        self.level = level
+
+    def match(self, log_level: LogLevel, text: str) -> bool:
+        return log_level == self.level
+
+
+# добавляет дату и время
+class DefaultFormatter:
+    def format(self, log_level: LogLevel, text: str) -> str:
+        dt = datetime.now().strftime("%Y.%m.%d %H:%M:%S")
+        return f"[{log_level.name}] [{dt}] {text}"
+
+
+# вывод логов на экран
+class ConsoleHandler:
+    def handle(self, log_level: LogLevel, text: str) -> None:
+        print(text)
+
+
+# запись логов в файл
+class FileHandler:
+    def __init__(self, filename: str):
+        self.filename = filename
+
+    def handle(self, log_level: LogLevel, text: str) -> None:
+        with open(self.filename, 'a', encoding='utf-8') as f:
+            f.write(text + '\n')
+
+
+# отправка логов через сокет
+class SocketHandler:
+    def __init__(self, host: str, port: int):
+        self.host = host
+        self.port = port
+
+    def handle(self, log_level: LogLevel, text: str) -> None:
+        try:
+            with socket.create_connection((self.host, self.port), timeout=1.0) as s:
+                s.sendall((text + '\n').encode('utf-8'))
+        except OSError as e:
+            print(f"[SocketHandler] Не удалось отправить лог: {e}")
+
+
+# запись в системный журнал
+class SyslogHandler:
+    _LEVEL_MAP = {
+        LogLevel.INFO: logging.INFO,
+        LogLevel.WARN: logging.WARNING,
+        LogLevel.ERROR: logging.ERROR,
+    }
+
+    def __init__(self, facility: str = "user"):
+        self._logger = logging.getLogger("syslog_handler")
+        self._logger.setLevel(logging.DEBUG)
+        self._logger.propagate = False
+        if self._logger.handlers:
+            return
+        try:
+            # нативный syslog (Unix)
+            handler = logging.handlers.SysLogHandler(
+                address="/dev/log", facility=facility
+            )
+            self._logger.addHandler(handler)
+        except (OSError, AttributeError, FileNotFoundError):
+            try:
+                # fallback на UDP (Windows)
+                handler = logging.handlers.SysLogHandler(
+                    address=("localhost", 514), facility=facility
+                )
+                self._logger.addHandler(handler)
+            except Exception:
+                self._logger.addHandler(logging.NullHandler())
+
+    def handle(self, log_level: LogLevel, text: str) -> None:
+        self._logger.log(self._LEVEL_MAP[log_level], text)
+
+
+# запись на FTP
+class FtpHandler:
+    def __init__(self, host: str, user: str, passwd: str, filename: str):
+        self.host = host
+        self.user = user
+        self.passwd = passwd
+        self.filename = filename
+        self._buffer = StringIO()
+
+    def handle(self, log_level: LogLevel, text: str) -> None:
+        self._buffer.write(text + '\n')
+        self._flush()
+
+    def _flush(self) -> None:
+        try:
+            with FTP(self.host, timeout=2) as ftp:
+                ftp.login(self.user, self.passwd)
+                data = self._buffer.getvalue().encode('utf-8')
+                ftp.storbinary(f"STOR {self.filename}", BytesIO(data))
+            self._buffer = StringIO()  # очистка после успешной отправки
+        except Exception as e:
+            print(f"[FtpHandler] Не удалось выгрузить логи на FTP: {e}")
+
+class Logger:
+    def __init__(self, filters: List[ILogFilter], formatters: List[ILogFormatter], handlers: List[ILogHandler]):
+        self.filters = filters
+        self.formatters = formatters
+        self.handlers = handlers
+
+    def log(self, log_level: LogLevel, text: str) -> None:
+        for f in self.filters:
+            if not f.match(log_level, text):
+                return
+
+        formatted_text = text
+        for fmt in self.formatters:
+            formatted_text = fmt.format(log_level, formatted_text)
+
+        for h in self.handlers:
+            h.handle(log_level, formatted_text)
+
+    def log_info(self, text: str) -> None:
+        self.log(LogLevel.INFO, text)
+
+    def log_warn(self, text: str) -> None:
+        self.log(LogLevel.WARN, text)
+
+    def log_error(self, text: str) -> None:
+        self.log(LogLevel.ERROR, text)
+
+if __name__ == "__main__":
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    file_path = os.path.join(base_dir, "app.log")
+    open(file_path, "w", encoding="utf-8").close()  # очистка файла
+
+    print()
+    print("Запись в консоль и файл с фильтром по уровню")
+    print()
+    logger = Logger(
+        filters=[LevelFilter(LogLevel.INFO)],
+        formatters=[DefaultFormatter()],
+        handlers=[ConsoleHandler(), FileHandler(file_path)],
+    )
+    logger.log_info("приложение запущено")
+    logger.log_warn("мало памяти")       # отсекается (не INFO)
+    logger.log_error("сбой сети")        # отсекается (не INFO)
+
+    print()
+    print("Содержимое файла app.log:")
+    with open(file_path, "r", encoding="utf-8") as f:
+        print(f.read())
+
+    print()
+    print("Фильтр по подстроке 'БД' и уровню ERROR")
+    print()
+    logger2 = Logger(
+        filters=[LevelFilter(LogLevel.ERROR), SimpleLogFilter("БД")],
+        formatters=[DefaultFormatter()],
+        handlers=[ConsoleHandler()],
+    )
+    logger2.log_info("БД инфо")          # отсекается по уровню
+    logger2.log_error("БД упала")        # проходит
+    logger2.log_error("сеть упала")      # отсекается по подстроке
+
+    print()
+    print("Фильтр по регулярному выражению (цифры)")
+    print()
+    logger3 = Logger(
+        filters=[ReLogFilter(r"\d+")],
+        formatters=[DefaultFormatter()],
+        handlers=[ConsoleHandler()],
+    )
+    logger3.log_info("код 404")          # проходит
+    logger3.log_warn("без цифр")         # отсекается
+
+    #SocketHandler
+    print()
+    print("Отправка лога через сокет")
+    print()
+    received: list[str] = []
+
+    def _socket_server():
+        srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        srv.bind(("127.0.0.1", 0))
+        port = srv.getsockname()[1]
+        srv.listen(1)
+        received.append(str(port))
+        srv.settimeout(3.0)
+        try:
+            conn, _ = srv.accept()
+            with conn:
+                received.append(conn.recv(4096).decode("utf-8").strip())
+        except socket.timeout:
+            pass
+        finally:
+            srv.close()
+
+    t = threading.Thread(target=_socket_server, daemon=True)
+    t.start()
+    for _ in range(50):
+        if received:
+            break
+        time.sleep(0.05)
+
+    if received:
+        port = int(received[0])
+        logger4 = Logger(
+            filters=[],
+            formatters=[DefaultFormatter()],
+            handlers=[SocketHandler("127.0.0.1", port)],
+        )
+        logger4.log_info("сокет")
+        t.join(timeout=2)
+        print("Получено сервером:", received[1] if len(received) > 1 else "(нет)")
+
+    #SyslogHandler ---
+    print()
+    print("Запись лога в syslog")
+    print()
+    logger5 = Logger(
+        filters=[],
+        formatters=[DefaultFormatter()],
+        handlers=[SyslogHandler()],
+    )
+    logger5.log_info("syslog")
+    print("Отправлено в syslog (если доступен)")
+
+    # FtpHandler
+    print()
+    print("Отправка лога на FTP")
+    print()
+    logger6 = Logger(
+        filters=[],
+        formatters=[DefaultFormatter()],
+        handlers=[FtpHandler("127.0.0.1", "user", "pass", "log.txt")],
+    )
+    logger6.log_info("ftp")
+    print("Попытка отправки на FTP завершена")
