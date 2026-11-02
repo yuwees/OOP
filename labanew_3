@@ -1,0 +1,147 @@
+import re
+from datetime import datetime
+from enum import Enum, auto
+from typing import Protocol, List
+
+# уровни важности для логов
+class LogLevel(Enum):
+    INFO = auto()
+    WARN = auto()
+    ERROR = auto()
+
+# интерфейс для фильтров
+class ILogFilter(Protocol):
+    def match(self, log_level: LogLevel, text: str) -> bool:
+        ...
+
+# интерфейс для обработчиков
+class ILogHandler(Protocol):
+    def handle(self, log_level: LogLevel, text: str) -> None:
+        ...
+
+# интерфейс для форматтеров
+class ILogFormatter(Protocol):
+    def format(self, log_level: LogLevel, text: str) -> str:
+        ...
+
+# фильтр по обычному тексту
+class SimpleLogFilter:
+    def __init__(self, pattern: str):
+        self.pattern = pattern
+
+    def match(self, log_level: LogLevel, text: str) -> bool:
+        return self.pattern in text
+
+# фильтр по регуляркам
+class ReLogFilter:
+    def __init__(self, pattern: str):
+        self.pattern = re.compile(pattern)
+
+    def match(self, log_level: LogLevel, text: str) -> bool:
+        return bool(self.pattern.search(text))
+
+# фильтр по уровню важности
+class LevelFilter:
+    def __init__(self, level: LogLevel):
+        self.level = level
+
+    def match(self, log_level: LogLevel, text: str) -> bool:
+        return log_level == self.level
+
+# добавляет дату и время
+class DefaultFormatter:
+    def format(self, log_level: LogLevel, text: str) -> str:
+        dt = datetime.now().strftime("%Y.%m.%d %H:%M:%S")
+        return f"[{log_level.name}] [{dt}] {text}"
+
+# вывод логов на экран
+class ConsoleHandler:
+    def handle(self, log_level: LogLevel, text: str) -> None:
+        print(text)
+
+# запись логов в файл
+class FileHandler:
+    def __init__(self, filename: str):
+        self.filename = filename
+
+    def handle(self, log_level: LogLevel, text: str) -> None:
+        with open(self.filename, 'a', encoding='utf-8') as f:
+            f.write(text + '\n')
+
+# имитация отправки по сети
+class SocketHandler:
+    def __init__(self, host: str, port: int):
+        self.host = host
+        self.port = port
+
+    def handle(self, log_level: LogLevel, text: str) -> None:
+        print(f"[SocketHandler] отправка на {self.host}:{self.port} лог {text}")
+
+# имитация записи в системный журнал
+class SyslogHandler:
+    def handle(self, log_level: LogLevel, text: str) -> None:
+        print(f"[SyslogHandler] запись в журнал лог {text}")
+
+# имитация загрузки на сервер
+class FtpHandler:
+    def __init__(self, host: str, user: str, passwd: str, filename: str):
+        self.host = host
+        self.user = user
+        self.passwd = passwd
+        self.filename = filename
+
+    def handle(self, log_level: LogLevel, text: str) -> None:
+        print(f"[FtpHandler] загрузка на {self.host} лог {text}")
+
+# главный класс логгера
+class Logger:
+    def __init__(self, filters: List[ILogFilter], formatters: List[ILogFormatter], handlers: List[ILogHandler]):
+        self.filters = filters
+        self.formatters = formatters
+        self.handlers = handlers
+
+    # основной конвейер
+    def log(self, log_level: LogLevel, text: str) -> None:
+        for f in self.filters:
+            if not f.match(log_level, text):
+                return
+        
+        formatted_text = text
+        for fmt in self.formatters:
+            formatted_text = fmt.format(log_level, formatted_text)
+            
+        for h in self.handlers:
+            h.handle(log_level, formatted_text)
+
+    # для обычных сообщений
+    def log_info(self, text: str) -> None:
+        self.log(LogLevel.INFO, text)
+
+    # для предупреждений
+    def log_warn(self, text: str) -> None:
+        self.log(LogLevel.WARN, text)
+
+    # для ошибок
+    def log_error(self, text: str) -> None:
+        self.log(LogLevel.ERROR, text)
+
+# проверка запуска файла
+if __name__ == "__main__":
+    filters = [
+        LevelFilter(LogLevel.ERROR) 
+    ]
+    
+    formatters = [
+        DefaultFormatter()
+    ]
+    
+    handlers = [
+        ConsoleHandler(),
+        SyslogHandler(),
+        FtpHandler("ftp.example.com", "admin", "1234", "logs.txt")
+    ]
+    
+    logger = Logger(filters, formatters, handlers)
+    
+    logger.log_info("система запущена")
+    logger.log_error("ошибка базы данных")
