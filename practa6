@@ -1,0 +1,200 @@
+from __future__ import annotations
+
+import functools
+import json
+import time
+from abc import ABC, abstractmethod
+from typing import Any, Callable, Protocol, TypeVar
+
+
+# --- 1) Report -------------------------------------------------------------
+class Report:
+    __slots__ = ("title", "columns", "_rows")
+
+    def __init__(self, title: str, columns: list[str]) -> None:
+        self.title: str = title
+        self.columns: list[str] = list(columns)
+        self._rows: list[dict[str, str]] = []
+
+    def add_row(self, row: dict[str, str]) -> None:
+        if set(row) != set(self.columns):
+            raise ValueError("Ключи не совпадают с колонками")
+
+        new_row: dict[str, str] = {}
+        for col in self.columns:
+            value = row[col]
+            if isinstance(value, str):
+                new_row[col] = value
+            else:
+                new_row[col] = str(value)
+        self._rows.append(new_row)
+
+    def rows(self) -> list[dict[str, str]]:
+        return self._rows
+
+    @property
+    def rows_count(self) -> int:
+        return len(self._rows)
+
+    def __str__(self) -> str:
+        n = self.rows_count
+        if n % 10 == 1 and n % 100 != 11:
+            word = "строка"
+        elif 2 <= n % 10 <= 4 and not (12 <= n % 100 <= 14):
+            word = "строки"
+        else:
+            word = "строк"
+        return f"Отчёт '{self.title}' ({n} {word}, колонки: {', '.join(self.columns)})"
+
+    def __repr__(self) -> str:
+        return f"Report(title={self.title!r}, columns={self.columns!r})"
+
+
+# --- 7) log_calls ----------------------------------------------------------
+F = TypeVar("F", bound=Callable[..., Any])
+
+
+def log_calls(method: F) -> F:
+    @functools.wraps(method)
+    def wrapper(self: Any, *args: Any, **kwargs: Any) -> Any:
+        print(f"{type(self).__name__}.{method.__name__} начинается")
+        t = time.perf_counter()
+        result = method(self, *args, **kwargs)
+        print(f"{type(self).__name__}.{method.__name__} занял {time.perf_counter() - t:.6f} с")
+        return result
+
+    return wrapper  # type: ignore[return-value]
+
+
+# --- 2) IReportExporter ----------------------------------------------------
+class IReportExporter(ABC):
+    __slots__ = ()
+
+    @abstractmethod
+    def export(self, report: Report) -> str: ...
+
+
+# --- 3) Экспортёры ---------------------------------------------------------
+class JsonExporter(IReportExporter):
+    __slots__ = ()
+
+    @log_calls
+    def export(self, report: Report) -> str:
+        data: dict[str, Any] = {
+            "title": report.title,
+            "columns": report.columns,
+            "rows": report.rows(),
+        }
+        return json.dumps(data, ensure_ascii=False, indent=2)
+
+
+class CsvExporter(IReportExporter):
+    __slots__ = ()
+
+    @log_calls
+    def export(self, report: Report) -> str:
+        lines: list[str] = []
+        lines.append(";".join(report.columns))
+        for row in report.rows():
+            values: list[str] = []
+            for col in report.columns:
+                values.append(row[col])
+            lines.append(";".join(values))
+        return "\n".join(lines)
+
+
+class MarkdownExporter(IReportExporter):
+    __slots__ = ()
+
+    @log_calls
+    def export(self, report: Report) -> str:
+        lines: list[str] = []
+
+        header: str = "| " + " | ".join(report.columns) + " |"
+        lines.append(header)
+
+        sep_parts: list[str] = []
+        for _ in report.columns:
+            sep_parts.append("---")
+        lines.append("| " + " | ".join(sep_parts) + " |")
+
+        for row in report.rows():
+            values: list[str] = []
+            for col in report.columns:
+                values.append(row[col])
+            lines.append("| " + " | ".join(values) + " |")
+
+        return "\n".join(lines)
+
+
+# --- 4) Saver (Protocol) ---------------------------------------------------
+class Saver(Protocol):
+    def save(self, path: str, content: str) -> None: ...
+
+
+# --- 5) Сохранялки (без наследования!) -------------------------------------
+class FileSaver:
+    __slots__ = ()
+
+    def save(self, path: str, content: str) -> None:
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(content)
+
+
+class ConsoleSaver:
+    __slots__ = ()
+
+    def save(self, path: str, content: str) -> None:
+        print(content)
+
+
+class MemorySaver:
+    __slots__ = ("storage",)
+
+    def __init__(self) -> None:
+        self.storage: dict[str, str] = {}
+
+    def save(self, path: str, content: str) -> None:
+        self.storage[path] = content
+
+
+# --- 6) ReportPipeline -----------------------------------------------------
+class ReportPipeline:
+    __slots__ = ("_exporter", "_saver")
+
+    def __init__(self, exporter: IReportExporter, saver: Saver) -> None:
+        self._exporter: IReportExporter = exporter
+        self._saver: Saver = saver
+
+    def run(self, report: Report, path: str) -> None:
+        content: str = self._exporter.export(report)
+        self._saver.save(path, content)
+
+
+# --- 8) Демо (короткое) ----------------------------------------------------
+def main() -> None:
+    report = Report("Продажи", ["дата", "товар", "сумма"])
+    report.add_row({"дата": "2026-01-01", "товар": "Мандарины", "сумма": 100})
+    report.add_row({"дата": "2026-01-02", "товар": "Бананы", "сумма": 250})
+    report.add_row({"дата": "2026-01-03", "товар": "Апельсины", "сумма": 175})
+    report.add_row({"дата": "2026-01-04", "товар": "Груши", "сумма": 90})
+
+    print(report)
+    print(repr(report))
+
+    ReportPipeline(JsonExporter(), FileSaver()).run(report, "report.json")
+    ReportPipeline(CsvExporter(), ConsoleSaver()).run(report, "report.csv")
+    saver = MemorySaver()
+    ReportPipeline(MarkdownExporter(), saver).run(report, "report.md")
+
+    print(saver.storage["report.md"])
+    print(list(saver.storage.keys()))
+
+    try:
+        report.add_row({"дата": "2026-01-05", "товар": "Киви", "лишнее": 300})
+    except ValueError as e:
+        print(f"ValueError: {e}")
+
+
+if __name__ == "__main__":
+    main()
