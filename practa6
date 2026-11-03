@@ -6,8 +6,6 @@ import time
 from abc import ABC, abstractmethod
 from typing import Any, Callable, Protocol, TypeVar
 
-
-# --- 1) Report -------------------------------------------------------------
 class Report:
     __slots__ = ("title", "columns", "_rows")
 
@@ -50,9 +48,7 @@ class Report:
         return f"Report(title={self.title!r}, columns={self.columns!r})"
 
 
-# --- 7) log_calls ----------------------------------------------------------
 F = TypeVar("F", bound=Callable[..., Any])
-
 
 def log_calls(method: F) -> F:
     @functools.wraps(method)
@@ -63,18 +59,14 @@ def log_calls(method: F) -> F:
         print(f"{type(self).__name__}.{method.__name__} занял {time.perf_counter() - t:.6f} с")
         return result
 
-    return wrapper  # type: ignore[return-value]
+    return wrapper
 
-
-# --- 2) IReportExporter ----------------------------------------------------
 class IReportExporter(ABC):
     __slots__ = ()
 
     @abstractmethod
     def export(self, report: Report) -> str: ...
 
-
-# --- 3) Экспортёры ---------------------------------------------------------
 class JsonExporter(IReportExporter):
     __slots__ = ()
 
@@ -126,13 +118,9 @@ class MarkdownExporter(IReportExporter):
 
         return "\n".join(lines)
 
-
-# --- 4) Saver (Protocol) ---------------------------------------------------
 class Saver(Protocol):
     def save(self, path: str, content: str) -> None: ...
 
-
-# --- 5) Сохранялки (без наследования!) -------------------------------------
 class FileSaver:
     __slots__ = ()
 
@@ -140,13 +128,11 @@ class FileSaver:
         with open(path, "w", encoding="utf-8") as f:
             f.write(content)
 
-
 class ConsoleSaver:
     __slots__ = ()
 
     def save(self, path: str, content: str) -> None:
         print(content)
-
 
 class MemorySaver:
     __slots__ = ("storage",)
@@ -157,8 +143,6 @@ class MemorySaver:
     def save(self, path: str, content: str) -> None:
         self.storage[path] = content
 
-
-# --- 6) ReportPipeline -----------------------------------------------------
 class ReportPipeline:
     __slots__ = ("_exporter", "_saver")
 
@@ -170,8 +154,6 @@ class ReportPipeline:
         content: str = self._exporter.export(report)
         self._saver.save(path, content)
 
-
-# --- 8) Демо (короткое) ----------------------------------------------------
 def main() -> None:
     report = Report("Продажи", ["дата", "товар", "сумма"])
     report.add_row({"дата": "2026-01-01", "товар": "Мандарины", "сумма": 100})
