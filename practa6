@@ -154,6 +154,7 @@ class ReportPipeline:
         content: str = self._exporter.export(report)
         self._saver.save(path, content)
 
+
 def main() -> None:
     report = Report("Продажи", ["дата", "товар", "сумма"])
     report.add_row({"дата": "2026-01-01", "товар": "Мандарины", "сумма": 100})
@@ -164,18 +165,15 @@ def main() -> None:
     print(report)
     print(repr(report))
 
+    memory_saver = MemorySaver()
     ReportPipeline(JsonExporter(), FileSaver()).run(report, "report.json")
-    ReportPipeline(CsvExporter(), ConsoleSaver()).run(report, "report.csv")
-    saver = MemorySaver()
-    ReportPipeline(MarkdownExporter(), saver).run(report, "report.md")
-
-    print(saver.storage["report.md"])
-    print(list(saver.storage.keys()))
+    ReportPipeline(CsvExporter(), FileSaver()).run(report, "report.csv")
+    ReportPipeline(MarkdownExporter(), FileSaver()).run(report, "report.md")
 
     try:
         report.add_row({"дата": "2026-01-05", "товар": "Киви", "лишнее": 300})
     except ValueError as e:
-        print(f"ValueError: {e}")
+        print(f"\nValueError: {e}")
 
 
 if __name__ == "__main__":
