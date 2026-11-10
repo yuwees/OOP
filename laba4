@@ -28,16 +28,10 @@ class Event(Generic[TEventArgs]):
         for handler in list(self._handlers):
             handler.handle(sender, args)
 
-
+#аргументы событий 
 class PropertyChangedEventArgs(EventArgs):
     def __init__(self, property_name: str) -> None:
         self.property_name = property_name
-
-
-class PropertyChangedLogger:
-    def handle(self, sender: Any, args: PropertyChangedEventArgs) -> None:
-        print(f"[LOG] Объект {sender} изменил свойство '{args.property_name}'")
-
 
 class PropertyChangingEventArgs(EventArgs):
     def __init__(self, property_name: str, old_value: Any, new_value: Any) -> None:
@@ -45,6 +39,11 @@ class PropertyChangingEventArgs(EventArgs):
         self.old_value = old_value
         self.new_value = new_value
         self.can_change: bool = True
+
+#обработчики
+class PropertyChangedLogger:
+    def handle(self, sender: Any, args: PropertyChangedEventArgs) -> None:
+        print(f"[LOG] Объект {sender} изменил свойство '{args.property_name}'")
 
 
 class PropertyChangingValidator:
@@ -62,7 +61,7 @@ class PropertyChangingValidator:
 
         print(f"[VALID] OK '{args.property_name}': {args.old_value!r} -> {args.new_value!r}")
 
-# наблюдение за юсером и продукт
+# наблюддение 
 class ObservableObject:
     def __init__(self) -> None:
         self.property_changing: Event[PropertyChangingEventArgs] = Event()
@@ -152,8 +151,8 @@ class Product(ObservableObject):
 
 
 def demo() -> None:
-    # Создание объектов и подписчиков, подписка на события
-    user = User("Anya", 19, "anyatd@gmail.com")
+    
+    user = User("Anya", 19, "anya@gmail.com")
     product = Product("Laptop", 1000.0, 5)
     logger_user = PropertyChangedLogger()
     logger_product = PropertyChangedLogger()
@@ -164,20 +163,19 @@ def demo() -> None:
     product.property_changing += validator
     product.property_changed += logger_product
 
-    # Успешное изменение (валидация пройдена)
+    #валидация пройдена
     user.name = "Masha"
     product.price = 1200.0
 
-    # Неудачное изменение (валидация не пройдена)
+    #валидация не пройдена
     user.age = -5
     user.email = "   "
     product.quantity = -1
 
-    # Отписка одного обработчика
     user.property_changed -= logger_user
 
-    # Повторное изменение и реакция на изменение
-    user.name = "Charlie"
+    #повторное изменение и реакция 
+    user.name = "Andrei"
     user.age = 30
     user.age = -100
 
