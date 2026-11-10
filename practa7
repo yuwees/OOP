@@ -1,0 +1,97 @@
+from typing import Protocol
+
+
+class DataReceiver(Protocol):
+    def consume(self, metric_name: str, current_value: float, trend: str) -> None:
+        ...
+
+
+class DataStream:
+    def __init__(self, history_size: int = 3):
+        self.history_size = history_size
+        self.history = []
+        self.receivers = []
+
+    def __rshift__(self, receiver: DataReceiver):
+        self.receivers.append(receiver)
+        return self
+
+    def __lshift__(self, receiver: DataReceiver):
+        if receiver in self.receivers:
+            self.receivers.remove(receiver)
+        return self
+
+    def broadcast(self, metric_name: str, new_value: float):
+        previous = self.history[-1] if self.history else new_value
+
+        if new_value > previous:
+            trend = "UP"
+        elif new_value < previous:
+            trend = "DOWN"
+        else:
+            trend = "STABLE"
+
+        self.history.append(new_value)
+        if len(self.history) > self.history_size:
+            self.history.pop(0)
+
+        for receiver in self.receivers:
+            receiver.consume(metric_name, new_value, trend)
+
+
+class ConsoleDashboard:
+    def consume(self, metric_name: str, current_value: float, trend: str) -> None:
+        print(f"[Панель] Метрика: {metric_name} | Значение: {current_value} | Направление: {trend}")
+
+
+class ThresholdGuard:
+    def __init__(self, limit: float):
+        self.limit = limit
+
+    def consume(self, metric_name: str, current_value: float, trend: str) -> None:
+        if current_value > self.limit and trend == "UP":
+            print(f"[АЛЕРТ] {metric_name} превысил лимит {self.limit}! Текущее значение: {current_value} (тренд {trend})")
+
+
+class MetricTracker:
+    def __init__(self, metric_name: str):
+        self.metric_name = metric_name
+        self._load = 0.0
+        self.stream = DataStream()
+
+    @property
+    def load(self):
+        return self._load
+
+    @load.setter
+    def load(self, value: float):
+        self._load = value
+        self.stream.broadcast(self.metric_name, value)
+
+
+# Тестирование
+if __name__ == "__main__":
+    tracker = MetricTracker("CPU_Load")
+
+    dashboard = ConsoleDashboard()
+    guard = ThresholdGuard(limit=80)
+
+    tracker.stream >> dashboard
+    tracker.stream >> guard
+
+    print("--- 50 ---")
+    tracker.load = 50
+    print("--- 75 ---")
+    tracker.load = 75
+    print("--- 85 (вард должен сработать) ---")
+    tracker.load = 85
+    print("--- 82 (тренд DOWN, вард молчит) ---")
+    tracker.load = 82
+    print("--- 88 (тренд UP, вард срабатывает) ---")
+    tracker.load = 88
+
+    print("--- Отключаем ConsoleDashboard ---")
+    tracker.stream << dashboard
+
+    print("--- 90 (панель молчит, вард работает) ---")
+    tracker.load = 90
