@@ -1,0 +1,184 @@
+from typing import Any, Generic, Protocol, TypeVar
+
+
+TEventArgs = TypeVar("TEventArgs")
+
+
+class EventHandler(Protocol[TEventArgs]):
+    def handle(self, sender: Any, args: TEventArgs) -> None:
+        ...
+
+class EventArgs:
+    pass
+
+class Event(Generic[TEventArgs]):
+    def __init__(self) -> None:
+        self._handlers: list[EventHandler[TEventArgs]] = []
+
+    def __iadd__(self, handler: EventHandler[TEventArgs]) -> "Event[TEventArgs]":
+        self._handlers.append(handler)
+        return self
+
+    def __isub__(self, handler: EventHandler[TEventArgs]) -> "Event[TEventArgs]":
+        if handler in self._handlers:
+            self._handlers.remove(handler)
+        return self
+
+    def invoke(self, sender: Any, args: TEventArgs) -> None:
+        for handler in list(self._handlers):
+            handler.handle(sender, args)
+
+#аргументы событий 
+class PropertyChangedEventArgs(EventArgs):
+    def __init__(self, property_name: str) -> None:
+        self.property_name = property_name
+
+class PropertyChangingEventArgs(EventArgs):
+    def __init__(self, property_name: str, old_value: Any, new_value: Any) -> None:
+        self.property_name = property_name
+        self.old_value = old_value
+        self.new_value = new_value
+        self.can_change: bool = True
+
+#обработчики
+class PropertyChangedLogger:
+    def handle(self, sender: Any, args: PropertyChangedEventArgs) -> None:
+        print(f"[LOG] Объект {sender} изменил свойство '{args.property_name}'")
+
+
+class PropertyChangingValidator:
+    def handle(self, sender: Any, args: PropertyChangingEventArgs) -> None:
+        if isinstance(args.new_value, str) and args.new_value.strip() == "":
+            print(f"[VALID] ОТМЕНА '{args.property_name}': пустая строка")
+            args.can_change = False
+            return
+
+        if isinstance(args.new_value, (int, float)) and not isinstance(args.new_value, bool):
+            if args.new_value < 0:
+                print(f"[VALID] ОТМЕНА '{args.property_name}': отрицательное значение {args.new_value}")
+                args.can_change = False
+                return
+
+        print(f"[VALID] OK '{args.property_name}': {args.old_value!r} -> {args.new_value!r}")
+
+# наблюддение 
+class ObservableObject:
+    def __init__(self) -> None:
+        self.property_changing: Event[PropertyChangingEventArgs] = Event()
+        self.property_changed: Event[PropertyChangedEventArgs] = Event()
+
+    def _set_property(self, property_name: str, new_value: Any) -> None:
+        old_value = getattr(self, "_" + property_name)
+
+        changing_args = PropertyChangingEventArgs(property_name, old_value, new_value)
+        self.property_changing.invoke(self, changing_args)
+
+        if not changing_args.can_change:
+            return
+
+        setattr(self, "_" + property_name, new_value)
+        self.property_changed.invoke(self, PropertyChangedEventArgs(property_name))
+
+
+class User(ObservableObject):
+    def __init__(self, name: str, age: int, email: str) -> None:
+        super().__init__()
+        self._name = name
+        self._age = age
+        self._email = email
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @name.setter
+    def name(self, value: str) -> None:
+        self._set_property("name", value)
+
+    @property
+    def age(self) -> int:
+        return self._age
+
+    @age.setter
+    def age(self, value: int) -> None:
+        self._set_property("age", value)
+
+    @property
+    def email(self) -> str:
+        return self._email
+
+    @email.setter
+    def email(self, value: str) -> None:
+        self._set_property("email", value)
+
+    def __repr__(self) -> str:
+        return f"User(name={self._name!r}, age={self._age}, email={self._email!r})"
+
+
+class Product(ObservableObject):
+    def __init__(self, title: str, price: float, quantity: int) -> None:
+        super().__init__()
+        self._title = title
+        self._price = price
+        self._quantity = quantity
+
+    @property
+    def title(self) -> str:
+        return self._title
+
+    @title.setter
+    def title(self, value: str) -> None:
+        self._set_property("title", value)
+
+    @property
+    def price(self) -> float:
+        return self._price
+
+    @price.setter
+    def price(self, value: float) -> None:
+        self._set_property("price", value)
+
+    @property
+    def quantity(self) -> int:
+        return self._quantity
+
+    @quantity.setter
+    def quantity(self, value: int) -> None:
+        self._set_property("quantity", value)
+
+    def __repr__(self) -> str:
+        return f"Product(title={self._title!r}, price={self._price}, quantity={self._quantity})"
+
+
+def demo() -> None:
+    
+    user = User("Anya", 19, "anya@gmail.com")
+    product = Product("Laptop", 1000.0, 5)
+    logger_user = PropertyChangedLogger()
+    logger_product = PropertyChangedLogger()
+    validator = PropertyChangingValidator()
+
+    user.property_changing += validator
+    user.property_changed += logger_user
+    product.property_changing += validator
+    product.property_changed += logger_product
+
+    #валидация пройдена
+    user.name = "Masha"
+    product.price = 1200.0
+
+    #валидация не пройдена
+    user.age = -5
+    user.email = "   "
+    product.quantity = -1
+
+    user.property_changed -= logger_user
+
+    #повторное изменение и реакция 
+    user.name = "Andrei"
+    user.age = 30
+    user.age = -100
+
+
+if __name__ == "__main__":
+    demo()
