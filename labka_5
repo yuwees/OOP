@@ -177,6 +177,7 @@ class IAuthService(Protocol):
     def current_user(self) -> Optional[User]: ...
 
 
+#создание сервиса авторитизации 
 class AuthService:
     def __init__(self, user_repo: IUserRepository, session_file: str = "session.json"):
         self._user_repo = user_repo
@@ -209,9 +210,8 @@ class AuthService:
         with open(self._session_file, "w", encoding="utf-8") as f:
             json.dump({"user_id": self._current_user.id}, f, ensure_ascii=False)
 
-    # IAuthService
+    #авторизация пользователя
     def sign_in(self, user: User) -> None:
-        """Авторизация пользователя."""
         existing = self._user_repo.get_by_id(user.id)
         if existing is None:
             raise ValueError(f"Пользователь id={user.id} не найден в системе")
