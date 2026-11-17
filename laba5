@@ -39,7 +39,7 @@ class User:
             return NotImplemented
         return self.name >= other.name
 
-    # ----- сериализация -----
+    #сериализация и десериализация
     def to_dict(self, include_password: bool = True) -> dict:
         data = asdict(self)
         if not include_password:
