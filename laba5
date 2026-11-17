@@ -1,14 +1,4 @@
-"""
-  п.1-3  — dataclass User, сортировка по name, пароль скрыт в repr
-  п.4    — IDataRepository[T] (Protocol)
-  п.5    — IUserRepository(IDataRepository[User]) (Protocol)
-  п.6    — DataRepository[T] поддерживает IDataRepository[T] (хранение в JSON-файле)
-  п.7    — UserRepository(IUserRepository) на основе DataRepository[T]
-  п.8    — IAuthService (Protocol)
-  п.9    — AuthService: хранит текущего пользователя в файле, авто-восстановление
-  п.10   — demo(): добавление, редактирование, авторизация, смена пользователя,
-           авто-авторизация при повторном заходе
-"""
+
 
 from __future__ import annotations
 
