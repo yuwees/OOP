@@ -1,0 +1,295 @@
+from __future__ import annotations
+
+import json
+import os
+from dataclasses import dataclass, field, asdict
+from typing import (
+    Protocol, Sequence, TypeVar, Generic, Optional,
+    runtime_checkable,
+)
+
+
+@dataclass
+class User:
+    id: int
+    name: str
+    login: str
+    password: str = field(repr=False)  # не показывается в repr/str
+    email: Optional[str] = None
+    address: Optional[str] = None
+
+    def __lt__(self, other: "User") -> bool:
+        if not isinstance(other, User):
+            return NotImplemented
+        return self.name < other.name
+
+    def __le__(self, other: "User") -> bool:
+        if not isinstance(other, User):
+            return NotImplemented
+        return self.name <= other.name
+
+    def __gt__(self, other: "User") -> bool:
+        if not isinstance(other, User):
+            return NotImplemented
+        return self.name > other.name
+
+    def __ge__(self, other: "User") -> bool:
+        if not isinstance(other, User):
+            return NotImplemented
+        return self.name >= other.name
+
+    # сериализация
+    def to_dict(self, include_password: bool = True) -> dict:
+        data = asdict(self)
+        if not include_password:
+            data.pop("password", None)
+        return data
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "User":
+        return cls(
+            id=data["id"],
+            name=data["name"],
+            login=data["login"],
+            password=data["password"],
+            email=data.get("email"),
+            address=data.get("address"),
+        )
+
+
+T = TypeVar("T")
+
+
+@runtime_checkable
+class IDataRepository(Protocol[T]):
+    def get_all(self) -> Sequence[T]: ...
+    def get_by_id(self, id: int) -> Optional[T]: ...
+    def add(self, item: T) -> None: ...
+    def update(self, item: T) -> None: ...
+    def delete(self, item: T) -> None: ...
+
+
+@runtime_checkable
+class IUserRepository(IDataRepository[User], Protocol):
+    def get_by_login(self, login: str) -> Optional[User]: ...
+
+
+def _default_to_dict(obj) -> dict:
+    if hasattr(obj, "__dataclass_fields__"):
+        return asdict(obj)
+    return obj.__dict__
+
+
+# универсальный файловый репозиторий
+class DataRepository(Generic[T]):
+    def __init__(self, file_path: str, to_dict=None, from_dict=None):
+        self._file_path = file_path
+        self._to_dict = to_dict or _default_to_dict
+        self._from_dict = from_dict or (lambda d: d)
+        self._items: dict[int, T] = {}
+        self._load()
+
+    def _load(self) -> None:
+        if not os.path.exists(self._file_path):
+            self._items = {}
+            return
+        try:
+            with open(self._file_path, "r", encoding="utf-8") as f:
+                raw = json.load(f)
+        except (json.JSONDecodeError, OSError):
+            raw = []
+        self._items = {}
+        for d in raw:
+            obj = self._from_dict(d)
+            self._items[obj.id] = obj
+
+    def _save(self) -> None:
+        data = [self._to_dict(obj) for obj in self._items.values()]
+        with open(self._file_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+
+    # CRUD
+    def add(self, item: T) -> None:
+        if item.id in self._items:
+            raise ValueError(f"Элемент с id={item.id} уже существует")
+        self._items[item.id] = item
+        self._save()
+
+    def get_all(self) -> Sequence[T]:
+        return list(self._items.values())
+
+    def get_by_id(self, id: int) -> Optional[T]:
+        return self._items.get(id)
+
+    def update(self, item: T) -> None:
+        if item.id not in self._items:
+            raise KeyError(f"Элемент с id={item.id} не найден")
+        self._items[item.id] = item
+        self._save()
+
+    def delete(self, item: T) -> None:
+        if item.id in self._items:
+            del self._items[item.id]
+            self._save()
+
+
+class UserRepository(IUserRepository):
+    def __init__(self, file_path: str = "users.json"):
+        self._repo: DataRepository[User] = DataRepository(
+            file_path=file_path,
+            to_dict=lambda u: u.to_dict(include_password=True),
+            from_dict=User.from_dict,
+        )
+
+    # делегирование CRUD
+    def get_all(self) -> Sequence[User]:
+        return self._repo.get_all()
+
+    def get_by_id(self, id: int) -> Optional[User]:
+        return self._repo.get_by_id(id)
+
+    def add(self, item: User) -> None:
+        self._repo.add(item)
+
+    def update(self, item: User) -> None:
+        self._repo.update(item)
+
+    def delete(self, item: User) -> None:
+        self._repo.delete(item)
+
+    def get_by_login(self, login: str) -> Optional[User]:
+        for user in self._repo.get_all():
+            if user.login == login:
+                return user
+        return None
+
+
+# протокол требований авторизации
+@runtime_checkable
+class IAuthService(Protocol):
+    def sign_in(self, user: User) -> None: ...
+    def sign_out(self, user: User) -> None: ...
+
+    @property
+    def is_authorized(self) -> bool: ...
+
+    @property
+    def current_user(self) -> Optional[User]: ...
+
+
+class AuthService:
+    def __init__(self, user_repo: IUserRepository, session_file: str = "session.json"):
+        self._user_repo = user_repo
+        self._session_file = session_file
+        self._current_user: Optional[User] = None
+        self._auto_restore()
+
+    # автозагрузка сессии
+    def _auto_restore(self) -> None:
+        if not os.path.exists(self._session_file):
+            return
+        try:
+            with open(self._session_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except (json.JSONDecodeError, OSError):
+            return
+        user_id = data.get("user_id")
+        if user_id is None:
+            return
+        user = self._user_repo.get_by_id(user_id)
+        if user is not None:
+            self._current_user = user
+
+    # сохранение сессии
+    def _save_session(self) -> None:
+        if self._current_user is None:
+            if os.path.exists(self._session_file):
+                os.remove(self._session_file)
+            return
+        with open(self._session_file, "w", encoding="utf-8") as f:
+            json.dump({"user_id": self._current_user.id}, f, ensure_ascii=False)
+
+    # IAuthService
+    def sign_in(self, user: User) -> None:
+        """Авторизация пользователя."""
+        existing = self._user_repo.get_by_id(user.id)
+        if existing is None:
+            raise ValueError(f"Пользователь id={user.id} не найден в системе")
+        self._current_user = existing
+        self._save_session()
+
+    def sign_out(self, user: User) -> None:
+        if self._current_user and self._current_user.id == user.id:
+            self._current_user = None
+            self._save_session()
+
+    @property
+    def is_authorized(self) -> bool:
+        return self._current_user is not None
+
+    @property
+    def current_user(self) -> Optional[User]:
+        return self._current_user
+
+
+def demo():
+    for f in ("users_demo.json", "session_demo.json"):
+        if os.path.exists(f):
+            os.remove(f)
+
+    repo = UserRepository("users_demo.json")
+    auth = AuthService(repo, session_file="session_demo.json")
+
+    # добавление
+    print("1. Добавление пользователей")
+    repo.add(User(1, "Маша Смирнова", "masha", "pip1", "masha@mail.ru", "Сочи"))
+    repo.add(User(2, "Петя Круз", "petya", "pip2"))
+    print(f"  Всего пользователей: {len(repo.get_all())}")
+    print(f"  repr первого: {repo.get_by_id(1)!r}")
+
+    # редактирование
+    print("\n2. Редактирование пользователя id=2")
+    petya = repo.get_by_id(2)
+    petya.email = "petya@gmail.com"
+    petya.address = "Оренбург"
+    repo.update(petya)
+    print(f"  email={petya.email}, address={petya.address}")
+
+    # авторизация
+    print("\n3. Авторизация 'masha'")
+    masha = repo.get_by_login("masha")
+    if masha is not None:
+        auth.sign_in(masha)
+        print(f"  Авторизован: {auth.current_user.name}")
+
+    # смена пользователя
+    print("\n4. Смена пользователя на 'petya'")
+    petya = repo.get_by_login("petya")
+    if petya is not None:
+        auth.sign_in(petya)
+        print(f"  Авторизован: {auth.current_user.name}")
+
+    # повторный запуск
+    print("\n5. Повторный запуск (новый AuthService)")
+    auth2 = AuthService(UserRepository("users_demo.json"),
+                        session_file="session_demo.json")
+    if auth2.is_authorized:
+        print(f"  Авторизован автоматически: {auth2.current_user.name}")
+    else:
+        print("  Не авторизован (сессия не восстановлена)")
+
+    # проверка протоколов
+    print("\n6. Проверка протоколов")
+    print(f"  IDataRepository: {isinstance(repo, IDataRepository)}")
+    print(f"  IUserRepository: {isinstance(repo, IUserRepository)}")
+    print(f"  IAuthService:    {isinstance(auth, IAuthService)}")
+
+    # выход
+    print("\n7. Выход пользователя")
+    if auth2.is_authorized:
+        auth2.sign_out(auth2.current_user)
+        print(f"  После выхода is_authorized={auth2.is_authorized}")
+
+
+if __name__ == "__main__":
+    demo()
