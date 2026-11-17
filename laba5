@@ -63,7 +63,7 @@ class User:
             name=data["name"],
             login=data["login"],
             password=data["password"],
-            email=data.get("email"),
+            email=data.get("email"), #неоьзятадьеные поля 
             address=data.get("address"),
         )
 
@@ -87,9 +87,9 @@ def _default_to_dict(obj) -> dict:
         return asdict(obj)
     return obj.__dict__
 
+#универсальный файловый репозиторий
 class DataRepository(Generic[T]):
-    def __init__(self, file_path: str, model_cls: Type[T],
-                 to_dict=None, from_dict=None):
+    def __init__(self, file_path: str, model_cls: Type[T], to_dict=None, from_dict=None):
         self._file_path = file_path
         self._model_cls = model_cls
         self._to_dict = to_dict or _default_to_dict
@@ -97,7 +97,6 @@ class DataRepository(Generic[T]):
         self._items: dict[int, T] = {}
         self._load()
 
-    # ---------- внутренние методы файлового хранилища ----------
     def _load(self) -> None:
         if not os.path.exists(self._file_path):
             self._items = {}
@@ -117,7 +116,7 @@ class DataRepository(Generic[T]):
         with open(self._file_path, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
 
-    # ---------- CRUD ----------
+    #CRUD
     def add(self, item: T) -> None:
         if item.id in self._items:
             raise ValueError(f"Элемент с id={item.id} уже существует")
@@ -167,7 +166,6 @@ class UserRepository(IUserRepository):
     def delete(self, item: User) -> None:
         self._repo.delete(item)
 
-    # специфичный метод
     def get_by_login(self, login: str) -> Optional[User]:
         for user in self._repo.get_all():
             if user.login == login:
@@ -175,12 +173,9 @@ class UserRepository(IUserRepository):
         return None
 
 
-# ============================================================
-# 8. Протокол IAuthService
-# ============================================================
+# протокол требований авторизации
 @runtime_checkable
 class IAuthService(Protocol):
-    """Протокол сервиса авторизации."""
 
     def sign_in(self, user: User) -> None: ...
     def sign_out(self, user: User) -> None: ...
@@ -191,31 +186,14 @@ class IAuthService(Protocol):
     @property
     def current_user(self) -> Optional[User]: ...
 
-
-# ============================================================
-# 9. Реализация AuthService
-#    Хранит текущего пользователя в файле, авто-восстановление
-# ============================================================
 class AuthService:
-    """
-    Сервис авторизации.
-    Хранит ID текущего пользователя в отдельном файле
-    и автоматически авторизует при повторном запуске программы,
-    если запись существует и пользователь найден в репозитории.
-    Поддерживает IAuthService структурно (набор методов/свойств совпадает).
-    """
-
-    def __init__(
-        self,
-        user_repo: IUserRepository,
-        session_file: str = "session.json",
-    ):
+    def __init__(self,user_repo: IUserRepository,session_file: str = "session.json",):
         self._user_repo = user_repo
         self._session_file = session_file
         self._current_user: Optional[User] = None
         self._auto_restore()
 
-    # ---------- автозагрузка сессии ----------
+    # автозагрузка сессии
     def _auto_restore(self) -> None:
         if not os.path.exists(self._session_file):
             return
@@ -231,7 +209,7 @@ class AuthService:
         if user is not None:
             self._current_user = user
 
-    # ---------- сохранение сессии ----------
+    # сохранение сессии
     def _save_session(self) -> None:
         if self._current_user is None:
             if os.path.exists(self._session_file):
@@ -240,7 +218,7 @@ class AuthService:
         with open(self._session_file, "w", encoding="utf-8") as f:
             json.dump({"user_id": self._current_user.id}, f, ensure_ascii=False)
 
-    # ---------- IAuthService ----------
+    # IAuthService
     def sign_in(self, user: User) -> None:
         """Авторизация пользователя."""
         existing = self._user_repo.get_by_id(user.id)
@@ -272,26 +250,26 @@ def demo():
     auth = AuthService(repo, session_file="session_demo.json")
 
     print("1. Добавление пользователей")
-    repo.add(User(1, "Иван Иванов", "ivan", "pwd1", "ivan@mail.ru", "Москва"))
-    repo.add(User(2, "Анна Петрова", "anna", "pwd2"))
+    repo.add(User(1, "Маша Смирнова", "masha", "pip1", "masha@mail.ru", "Сочи"))
+    repo.add(User(2, "Петя Круз", "petya", "pip2"))
     print(f"  Всего пользователей: {len(repo.get_all())}")
     print(f"  repr первого: {repo.get_by_id(1)!r}")   # пароля нет
 
     print("\n2. Редактирование пользователя id=2")
-    anna = repo.get_by_id(2)
-    anna.email, anna.address = "anna@example.com", "Санкт-Петербург"
-    repo.update(anna)
-    print(f"  email={anna.email}, address={anna.address}")
+    petya = repo.get_by_id(2)
+    prtya.email, petya.address = "petua@gmail.com", "Оренбург"
+    repo.update(petya)
+    print(f"  email={petya.email}, address={petya.address}")
 
-    print("\n3. Авторизация 'ivan'")
-    auth.sign_in(repo.get_by_login("ivan"))
+    print("\n3. Авторизация 'masha'")
+    auth.sign_in(repo.get_by_login("masha"))
     print(f"  Авторизован: {auth.current_user.name}")
 
-    print("\n4. Смена пользователя на 'anna'")
-    auth.sign_in(repo.get_by_login("anna"))
+    print("\n4. Смена пользователя на 'petya'")
+    auth.sign_in(repo.get_by_login("petya"))
     print(f"  Авторизован: {auth.current_user.name}")
 
-    print("\n5. Повторный запуск (новый экземпляр AuthService)")
+    print("\n5. Повторный запуск ")
     auth2 = AuthService(UserRepository("users_demo.json"),
                         session_file="session_demo.json")
     print(f"  Авторизован автоматически: {auth2.current_user.name}")
