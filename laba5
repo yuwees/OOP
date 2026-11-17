@@ -239,35 +239,55 @@ def demo():
     repo = UserRepository("users_demo.json")
     auth = AuthService(repo, session_file="session_demo.json")
 
+    # добавление
     print("1. Добавление пользователей")
     repo.add(User(1, "Маша Смирнова", "masha", "pip1", "masha@mail.ru", "Сочи"))
     repo.add(User(2, "Петя Круз", "petya", "pip2"))
     print(f"  Всего пользователей: {len(repo.get_all())}")
-    print(f"  repr первого: {repo.get_by_id(1)!r}")   # пароля нет
+    print(f"  repr первого: {repo.get_by_id(1)!r}")
 
+    # редактирование
     print("\n2. Редактирование пользователя id=2")
     petya = repo.get_by_id(2)
-    prtya.email, petya.address = "petua@gmail.com", "Оренбург"
+    petya.email = "petya@gmail.com"
+    petya.address = "Оренбург"
     repo.update(petya)
     print(f"  email={petya.email}, address={petya.address}")
 
+    # авторизация
     print("\n3. Авторизация 'masha'")
-    auth.sign_in(repo.get_by_login("masha"))
-    print(f"  Авторизован: {auth.current_user.name}")
+    masha = repo.get_by_login("masha")
+    if masha is not None:
+        auth.sign_in(masha)
+        print(f"  Авторизован: {auth.current_user.name}")
 
+    # смена пользователя
     print("\n4. Смена пользователя на 'petya'")
-    auth.sign_in(repo.get_by_login("petya"))
-    print(f"  Авторизован: {auth.current_user.name}")
+    petya = repo.get_by_login("petya")
+    if petya is not None:
+        auth.sign_in(petya)
+        print(f"  Авторизован: {auth.current_user.name}")
 
-    print("\n5. Повторный запуск ")
+    # повторный запуск
+    print("\n5. Повторный запуск (новый AuthService)")
     auth2 = AuthService(UserRepository("users_demo.json"),
                         session_file="session_demo.json")
-    print(f"  Авторизован автоматически: {auth2.current_user.name}")
+    if auth2.is_authorized:
+        print(f"  Авторизован автоматически: {auth2.current_user.name}")
+    else:
+        print("  Не авторизован (сессия не восстановлена)")
 
+    # проверка протоколов
     print("\n6. Проверка протоколов")
     print(f"  IDataRepository: {isinstance(repo, IDataRepository)}")
     print(f"  IUserRepository: {isinstance(repo, IUserRepository)}")
     print(f"  IAuthService:    {isinstance(auth, IAuthService)}")
+
+    # выход
+    print("\n7. Выход пользователя")
+    if auth2.is_authorized:
+        auth2.sign_out(auth2.current_user)
+        print(f"  После выхода is_authorized={auth2.is_authorized}")
 
 if __name__ == "__main__":
     demo()
