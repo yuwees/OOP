@@ -1,16 +1,16 @@
 from typing import Protocol
 
 
-class DataReceiver(Protocol):
+class DataReceiver(Protocol): #получатель данных
     def consume(self, metric_name: str, current_value: float, trend: str) -> None:
         ...
 
 
-class DataStream:
+class DataStream: #поток данных 
     def __init__(self, history_size: int = 3):
         self.history_size = history_size
         self.history = []
-        self.receivers = []
+        self.receivers = [] #зарегистрированные получатели 
 
     def __rshift__(self, receiver: DataReceiver):
         self.receivers.append(receiver)
@@ -21,7 +21,7 @@ class DataStream:
             self.receivers.remove(receiver)
         return self
 
-    def broadcast(self, metric_name: str, new_value: float):
+    def broadcast(self, metric_name: str, new_value: float): #рассылка всем
         previous = self.history[-1] if self.history else new_value
 
         if new_value > previous:
@@ -44,7 +44,7 @@ class ConsoleDashboard:
         print(f"[Панель] Метрика: {metric_name} | Значение: {current_value} | Направление: {trend}")
 
 
-class ThresholdGuard:
+class ThresholdGuard: #пороговое значение
     def __init__(self, limit: float):
         self.limit = limit
 
@@ -53,11 +53,11 @@ class ThresholdGuard:
             print(f"[ПРЕДУПРЕЖДЕНИЕ:] {metric_name} превысил лимит {self.limit}! Текущее значение: {current_value} (тренд {trend})")
 
 
-class MetricTracker:
+class MetricTracker: #источник данных
     def __init__(self, metric_name: str):
         self.metric_name = metric_name
         self._load = 0.0
-        self.stream = DataStream()
+        self.stream = DataStream() #создаес собственный поток данных для этой метрики
 
     @property
     def load(self):
@@ -70,14 +70,16 @@ class MetricTracker:
 
 if __name__ == "__main__":
     tracker = MetricTracker("CPU_Load")
-
+    
+    #2 получателя 
     dashboard = ConsoleDashboard()
     guard = ThresholdGuard(limit=80)
 
+    #регистрируем 
     tracker.stream >> dashboard
     tracker.stream >> guard
 
-
+    #прогон значений 
     tracker.load = 50
     tracker.load = 75
     tracker.load = 85
