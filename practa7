@@ -50,7 +50,7 @@ class ThresholdGuard:
 
     def consume(self, metric_name: str, current_value: float, trend: str) -> None:
         if current_value > self.limit and trend == "UP":
-            print(f"[АЛЕРТ] {metric_name} превысил лимит {self.limit}! Текущее значение: {current_value} (тренд {trend})")
+            print(f"[ПРЕДУПРЕЖДЕНИЕ:] {metric_name} превысил лимит {self.limit}! Текущее значение: {current_value} (тренд {trend})")
 
 
 class MetricTracker:
@@ -68,8 +68,6 @@ class MetricTracker:
         self._load = value
         self.stream.broadcast(self.metric_name, value)
 
-
-# Тестирование
 if __name__ == "__main__":
     tracker = MetricTracker("CPU_Load")
 
@@ -79,19 +77,15 @@ if __name__ == "__main__":
     tracker.stream >> dashboard
     tracker.stream >> guard
 
-    print("--- 50 ---")
+
     tracker.load = 50
-    print("--- 75 ---")
     tracker.load = 75
-    print("--- 85 (вард должен сработать) ---")
     tracker.load = 85
-    print("--- 82 (тренд DOWN, вард молчит) ---")
     tracker.load = 82
-    print("--- 88 (тренд UP, вард срабатывает) ---")
     tracker.load = 88
 
-    print("--- Отключаем ConsoleDashboard ---")
+    print("Отключаем ConsoleDashboard")
     tracker.stream << dashboard
 
-    print("--- 90 (панель молчит, вард работает) ---")
+    print("90")
     tracker.load = 90
