@@ -13,7 +13,7 @@ class Logger:
 
     def file_log(self, msg: str) -> None:
         self.file.write(msg + "\n")
-        self.file.flush()
+        self.file.flush() #принудительно сбрасываес буферна диск
 
     def close(self) -> None:
         self.file.close()
