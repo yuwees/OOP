@@ -1,0 +1,332 @@
+
+from abc import ABC, abstractmethod
+from typing import Dict, List, Optional
+import json
+
+class Logger:
+    def __init__(self, filepath: str):
+        self.filepath = filepath
+        self.file = open(filepath, "w", encoding="utf-8")
+
+    def console(self, msg: str) -> None:
+        print(msg)
+
+    def file_log(self, msg: str) -> None:
+        self.file.write(msg + "\n")
+        self.file.flush()
+
+    def close(self) -> None:
+        self.file.close()
+
+
+class TextBuffer:
+    def __init__(self) -> None:
+        self._chars: List[str] = []
+
+    def type_char(self, ch: str) -> None:
+        self._chars.append(ch)
+
+    def undo_char(self, ch: str) -> None:
+        if self._chars and self._chars[-1] == ch:
+            self._chars.pop()
+
+    def text(self) -> str:
+        return "".join(self._chars)
+
+class Command(ABC):
+    def set_context(self, buffer: Optional[TextBuffer], file_logger: Optional[Logger]) -> None: ...
+
+    @abstractmethod
+    def execute(self) -> None: ...
+
+    @abstractmethod
+    def undo(self) -> None: ...
+
+
+class TypeCharCommand(Command):
+    def __init__(self, char: str):
+        self.char = char
+        self.buffer: Optional[TextBuffer] = None
+        self.file_logger: Optional[Logger] = None
+
+    def set_context(self, buffer, file_logger):
+        self.buffer = buffer
+        self.file_logger = file_logger
+
+    def execute(self) -> None:
+        if self.buffer:
+            self.buffer.type_char(self.char)
+        if self.file_logger:
+            self.file_logger.file_log(self.buffer.text() if self.buffer else self.char)
+
+    def undo(self) -> None:
+        if self.buffer:
+            self.buffer.undo_char(self.char)
+        if self.file_logger:
+            self.file_logger.file_log(self.buffer.text() if self.buffer else "")
+
+
+class VolumeUpCommand(Command):
+    def __init__(self):
+        self.file_logger: Optional[Logger] = None
+
+    def set_context(self, buffer, file_logger):
+        self.file_logger = file_logger
+
+    def execute(self) -> None:
+        if self.file_logger:
+            self.file_logger.file_log("volume increased +20%")
+
+    def undo(self) -> None:
+        if self.file_logger:
+            self.file_logger.file_log("volume decreased -20%")
+
+
+class VolumeDownCommand(Command):
+    def __init__(self):
+        self.file_logger: Optional[Logger] = None
+
+    def set_context(self, buffer, file_logger):
+        self.file_logger = file_logger
+
+    def execute(self) -> None:
+        if self.file_logger:
+            self.file_logger.file_log("volume decreased -20%")
+
+    def undo(self) -> None:
+        if self.file_logger:
+            self.file_logger.file_log("volume increased +20%")
+
+
+class MediaPlayerCommand(Command):
+    def __init__(self):
+        self.file_logger: Optional[Logger] = None
+
+    def set_context(self, buffer, file_logger):
+        self.file_logger = file_logger
+
+    def execute(self) -> None:
+        if self.file_logger:
+            self.file_logger.file_log("media player launched")
+
+    def undo(self) -> None:
+        if self.file_logger:
+            self.file_logger.file_log("media player closed")
+
+class Keyboard:
+    def __init__(self, buffer: TextBuffer, logger: Logger):
+        self.bindings: Dict[str, Command] = {}
+        self.undo_stack: List[Command] = []
+        self.redo_stack: List[Command] = []
+        self.buffer = buffer
+        self.logger = logger
+
+    def bind(self, keys: str, command: Command) -> None:
+        command.set_context(self.buffer, self.logger)
+        self.bindings[keys] = command
+
+    def unbind(self, keys: str) -> None:
+        self.bindings.pop(keys, None)
+
+    def press(self, keys: str) -> None:
+        cmd = self.bindings.get(keys)
+        if cmd is None:
+            self.logger.console(f"[нет привязки для '{keys}']")
+            return
+        self.logger.console(keys)
+        cmd.execute()
+        self.undo_stack.append(cmd)
+        self.redo_stack.clear()
+
+    def undo(self) -> None:
+        if not self.undo_stack:
+            self.logger.console("[нечего отменять]")
+            return
+        self.logger.console("undo")
+        cmd = self.undo_stack.pop()
+        cmd.undo()
+        self.redo_stack.append(cmd)
+
+    def redo(self) -> None:
+        if not self.redo_stack:
+            self.logger.console("[нечего повторять]")
+            return
+        self.logger.console("redo")
+        cmd = self.redo_stack.pop()
+        cmd.execute()
+        self.undo_stack.append(cmd)
+
+    def clear_history(self) -> None:
+        self.undo_stack.clear()
+        self.redo_stack.clear()
+
+class CommandSerializer:
+    _factories = {
+        "TypeCharCommand":    lambda d: TypeCharCommand(d["symbol"]),
+        "VolumeUpCommand":    lambda d: VolumeUpCommand(),
+        "VolumeDownCommand":  lambda d: VolumeDownCommand(),
+        "MediaPlayerCommand": lambda d: MediaPlayerCommand(),
+    }
+
+    def to_dict(self, command: Command) -> dict:
+        type_name = type(command).__name__
+        if isinstance(command, TypeCharCommand):
+            return {"type": type_name, "symbol": command.char}
+        return {"type": type_name}
+
+    def from_dict(self, data: dict) -> Command:
+        type_name = data["type"]
+        factory = self._factories.get(type_name)
+        if factory is None:
+            raise ValueError(f"Неизвестный тип команды: {type_name}")
+        return factory(data)
+
+class IFileStorage(ABC):
+    @abstractmethod
+    def save(self, data: dict, filepath: str) -> None: ...
+
+    @abstractmethod
+    def load(self, filepath: str) -> dict: ...
+
+
+class JsonStorage(IFileStorage):
+    def save(self, data: dict, filepath: str) -> None:
+        with open(filepath, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+
+    def load(self, filepath: str) -> dict:
+        with open(filepath, "r", encoding="utf-8") as f:
+            return json.load(f)
+
+
+class TextStorage(IFileStorage):
+    def save(self, data: dict, filepath: str) -> None:
+        with open(filepath, "w", encoding="utf-8") as f:
+            for keys, value in data.items():
+                f.write(f"{keys}\t{json.dumps(value, ensure_ascii=False)}\n")
+
+    def load(self, filepath: str) -> dict:
+        result: dict = {}
+        with open(filepath, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.rstrip("\n")
+                if not line:
+                    continue
+                keys, value = line.split("\t", 1)
+                result[keys] = json.loads(value)
+        return result
+
+class KeyboardStateSaver:
+    def __init__(self, storage: IFileStorage, serializer: CommandSerializer):
+        self.storage = storage
+        self.serializer = serializer
+
+    def save(self, keyboard: Keyboard, filepath: str) -> None:
+        data = {keys: self.serializer.to_dict(cmd)
+                for keys, cmd in keyboard.bindings.items()}
+        self.storage.save(data, filepath)
+
+    def load(self, keyboard: Keyboard, filepath: str) -> None:
+        data = self.storage.load(filepath)
+        keyboard.bindings.clear()
+        for keys, cmd_dict in data.items():
+            command = self.serializer.from_dict(cmd_dict)
+            keyboard.bind(keys, command)
+
+
+def build_default_keyboard(logger: Logger) -> Keyboard:
+    kb = Keyboard(TextBuffer(), logger)
+    for ch in ("a", "b", "c", "d"):
+        kb.bind(ch, TypeCharCommand(ch))
+    kb.bind("ctrl++", VolumeUpCommand())
+    kb.bind("ctrl+-", VolumeDownCommand())
+    kb.bind("ctrl+p", MediaPlayerCommand())
+    return kb
+
+def main() -> None:
+
+    print("1. Команды, Undo и Redo")
+    logger = Logger("log.txt")
+    keyboard = build_default_keyboard(logger)
+
+    print("  нажимаем: a, b, c")
+    keyboard.press("a")
+    keyboard.press("b")
+    keyboard.press("c")
+
+    print("  дважды undo (в буфере должно остаться 'a')")
+    keyboard.undo()
+    keyboard.undo()
+
+    print("  redo (в буфере снова 'ab')")
+    keyboard.redo()
+
+    print("  спецкоманды: ctrl++, ctrl+-, ctrl+p")
+    keyboard.press("ctrl++")
+    keyboard.press("ctrl+-")
+    keyboard.press("ctrl+p")
+
+
+    print("\n2. Добавление и изменение привязок ")
+    keyboard.bind("e", TypeCharCommand("e"))
+    print("  добавили привязку: 'e' => TypeCharCommand('e')")
+
+    keyboard.bind("a", TypeCharCommand("A"))
+    print("  изменили привязку: 'a' =>  TypeCharCommand('A')")
+
+    print("  проверка: press('a') должен дать 'A'")
+    keyboard.press("a")
+    keyboard.undo()
+
+    print("  проверка: press('e') должен дать 'e'")
+    keyboard.press("e")
+    keyboard.undo()
+
+    print("\n3. Сохранение в JSON ")
+    saver = KeyboardStateSaver(JsonStorage(), CommandSerializer())
+    saver.save(keyboard, "keyboard.json")
+    with open("keyboard.json", "r", encoding="utf-8") as f:
+        print(f.read())
+
+    logger.close()
+
+    print("4. Лог в файле log.txt")
+    with open("log.txt", "r", encoding="utf-8") as f:
+        print(f.read().rstrip())
+
+
+    print("\n 5. Загрузка в новый экземпляр Keyboard ")
+    new_logger = Logger("log_restored.txt")
+    new_keyboard = Keyboard(TextBuffer(), new_logger)
+    saver.load(new_keyboard, "keyboard.json")
+
+    print("  восстановленные привязки:")
+    for keys, cmd in new_keyboard.bindings.items():
+        extra = f" (symbol='{cmd.char}')" if isinstance(cmd, TypeCharCommand) else ""
+        print(f"    {keys!r:10} -> {type(cmd).__name__}{extra}")
+
+    print("  проверка: press('a') -> 'A', press('b') -> 'Ab', press('ctrl++')")
+    new_keyboard.press("a")
+    new_keyboard.press("b")
+    new_keyboard.press("ctrl++")
+    new_logger.close()
+    with open("log_restored.txt", "r", encoding="utf-8") as f:
+        lines = [line.rstrip("\n") for line in f if line.strip()]
+        print("  log_restored.txt:", " | ".join(lines))
+
+
+    print("\n 6. Тот же saver + другой формат")
+    text_saver = KeyboardStateSaver(TextStorage(), CommandSerializer())
+    text_saver.save(keyboard, "keyboard.txt")
+    with open("keyboard.txt", "r", encoding="utf-8") as f:
+        print(f.read().rstrip())
+
+    tmp_logger = Logger("log_txt.txt")
+    kb_txt = Keyboard(TextBuffer(), tmp_logger)
+    text_saver.load(kb_txt, "keyboard.txt")
+    tmp_logger.close()
+    print(f"  загружено привязок через TextStorage: {len(kb_txt.bindings)}")
+
+
+if __name__ == "__main__":
+    main()
