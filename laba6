@@ -116,8 +116,8 @@ class MediaPlayerCommand(Command):
 class Keyboard: #invoker
     def __init__(self, buffer: TextBuffer, logger: Logger):
         self.bindings: Dict[str, Command] = {} #словарь привязок
-        self.undo_stack: List[Command] = [] #выполненные
-        self.redo_stack: List[Command] = [] #отмененные
+        self.undo_stack: List[Command] = [] #сделано и можно отменить 
+        self.redo_stack: List[Command] = [] #отменены и мобно повторить
         self.buffer = buffer
         self.logger = logger
 
