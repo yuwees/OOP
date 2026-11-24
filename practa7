@@ -56,7 +56,7 @@ class ThresholdGuard: #пороговое значение
 class MetricTracker: #источник данных
     def __init__(self, metric_name: str):
         self.metric_name = metric_name
-        self._load = 0.0
+        self._load = 0.0 #текущее значение метрики
         self.stream = DataStream() #создаес собственный поток данных для этой метрики
 
     @property
