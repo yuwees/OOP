@@ -21,7 +21,7 @@ class Logger:
 
 class TextBuffer:
     def __init__(self) -> None:
-        self._chars: List[str] = []
+        self._chars: List[str] = [] #буфер
 
     def type_char(self, ch: str) -> None:
         self._chars.append(ch)
@@ -50,7 +50,7 @@ class TypeCharCommand(Command):
         self.file_logger: Optional[Logger] = None
 
     def set_context(self, buffer, file_logger):
-        self.buffer = buffer
+        self.buffer = buffer #DI
         self.file_logger = file_logger
 
     def execute(self) -> None:
@@ -113,17 +113,17 @@ class MediaPlayerCommand(Command):
         if self.file_logger:
             self.file_logger.file_log("media player closed")
 
-class Keyboard:
+class Keyboard: #invoker
     def __init__(self, buffer: TextBuffer, logger: Logger):
-        self.bindings: Dict[str, Command] = {}
-        self.undo_stack: List[Command] = []
-        self.redo_stack: List[Command] = []
+        self.bindings: Dict[str, Command] = {} #словарь привязок
+        self.undo_stack: List[Command] = [] #выполненные
+        self.redo_stack: List[Command] = [] #отмененные
         self.buffer = buffer
         self.logger = logger
 
     def bind(self, keys: str, command: Command) -> None:
         command.set_context(self.buffer, self.logger)
-        self.bindings[keys] = command
+        self.bindings[keys] = command 
 
     def unbind(self, keys: str) -> None:
         self.bindings.pop(keys, None)
@@ -169,7 +169,7 @@ class CommandSerializer:
     }
 
     def to_dict(self, command: Command) -> dict:
-        type_name = type(command).__name__
+        type_name = type(command).__name__#имя класса как строка
         if isinstance(command, TypeCharCommand):
             return {"type": type_name, "symbol": command.char}
         return {"type": type_name}
@@ -181,7 +181,7 @@ class CommandSerializer:
             raise ValueError(f"Неизвестный тип команды: {type_name}")
         return factory(data)
 
-class IFileStorage(ABC):
+class IFileStorage(ABC): #DI
     @abstractmethod
     def save(self, data: dict, filepath: str) -> None: ...
 
@@ -224,14 +224,14 @@ class KeyboardStateSaver:
     def save(self, keyboard: Keyboard, filepath: str) -> None:
         data = {keys: self.serializer.to_dict(cmd)
                 for keys, cmd in keyboard.bindings.items()}
-        self.storage.save(data, filepath)
+        self.storage.save(data, filepath) #создали снимок приаязок
 
     def load(self, keyboard: Keyboard, filepath: str) -> None:
         data = self.storage.load(filepath)
         keyboard.bindings.clear()
         for keys, cmd_dict in data.items():
             command = self.serializer.from_dict(cmd_dict)
-            keyboard.bind(keys, command)
+            keyboard.bind(keys, command) #всостановлили состочние 
 
 
 def build_default_keyboard(logger: Logger) -> Keyboard:
