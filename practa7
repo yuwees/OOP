@@ -6,7 +6,7 @@ class DataReceiver(Protocol): #получатель данных
         ...
 
 
-class DataStream: #поток данных 
+class DataStream: #диспетчер потока
     def __init__(self, history_size: int = 3):
         self.history_size = history_size
         self.history = []
